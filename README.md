@@ -4,6 +4,8 @@ Local dashboard for Minecraft Meescht map zero-cycle practice.
 
 It tails `latest.log`, parses runs, and serves a live-updating web UI with tower/side/rotation-focused analytics and practice recommendations.
 
+![Dashboard Screenshot](image.png)
+
 ## Features
 - Live log ingestion from Minecraft `latest.log`
 - SQLite storage for raw log events and parsed attempts
@@ -47,4 +49,3 @@ Environment variables:
   Default: `0.4`
 - `ZERO_DASH_MAJOR_DAMAGE_THRESHOLD`: threshold for major damage hit classification  
   Default: `15`
-
