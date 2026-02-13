@@ -6,6 +6,13 @@ It tails `latest.log`, parses runs, and serves a live-updating web UI with tower
 
 ![Dashboard Screenshot](image.png)
 
+## Download
+
+1. Click the green `Code` button on the top of this github page.
+2. Click `Download ZIP` in the dropdown.
+3. Extract the ZIP to a folder.
+4. Run future commands from a command prompt  in that folder ( for windows users:  in windows explorer, shift+rightclick in  an empty space in the folder => open in Terminal, for linux users: you should be tech savvy enough )
+
 ## Features
 - Live log ingestion from Minecraft `latest.log`
 - SQLite storage for raw log events and parsed attempts
