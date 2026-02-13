@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Zero Cycle Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  </head>
+  <body>
+    <div class="bg-shape bg-shape-a"></div>
+    <div class="bg-shape bg-shape-b"></div>
+    <main class="page">
+      <section class="hero card">
+        <div>
+          <p class="eyebrow">Live Zero Cycle Analytics</p>
+          <h1>Ranked Practice Dashboard</h1>
+          <p id="lastUpdated">Waiting for data...</p>
+        </div>
+        <div class="health">
+          <label for="includeOneEight">Include 1/8</label>
+          <input id="includeOneEight" type="checkbox" />
+          <label for="windowFilter">Window</label>
+          <select id="windowFilter">
+            <option value="all">All</option>
+            <option value="current_session">Current Session</option>
+            <option value="last_10">Last 10</option>
+            <option value="last_25">Last 25</option>
+            <option value="last_50">Last 50</option>
+            <option value="last_100">Last 100</option>
+          </select>
+          <label for="rotationFilter">Rotation</label>
+          <select id="rotationFilter">
+            <option value="both">Both</option>
+            <option value="cw">CW</option>
+            <option value="ccw">CCW</option>
+          </select>
+          <label for="towerFilter">Tower</label>
+          <select id="towerFilter">
+            <option value="__GLOBAL__">All Towers</option>
+          </select>
+          <label for="sideFilter">Side</label>
+          <select id="sideFilter">
+            <option value="__GLOBAL__">Both Sides</option>
+          </select>
+          <span id="healthDot" class="dot dot-off"></span>
+          <span id="healthText">Reader offline</span>
+        </div>
+      </section>
+
+      <section class="card practice-card">
+        <h3>What To Practice Next</h3>
+        <p id="practiceNextMain">No recommendation yet.</p>
+        <p id="practiceNextMeta"></p>
+        <div class="practice-progress-wrap">
+          <div class="practice-progress-track">
+            <div id="practiceDataProgressBar" class="practice-progress-fill"></div>
+          </div>
+          <p id="practiceDataProgressText"></p>
+        </div>
+        <div class="practice-command-row">
+          <p id="practiceNextCommand"></p>
+          <button id="copyPracticeCommandBtn" type="button">Copy</button>
+          <button id="testPracticeSoundBtn" type="button">Test Sound</button>
+        </div>
+        <p id="practiceMissingTowers"></p>
+        <p id="practiceMissing18"></p>
+      </section>
+
+      <section class="kpi-grid">
+        <article class="card kpi">
+          <p>Total Attempts</p>
+          <h2 id="kpiAttempts">0</h2>
+        </article>
+        <article class="card kpi">
+          <p>Success Rate</p>
+          <h2 id="kpiSuccessRate">0.00%</h2>
+        </article>
+        <article class="card kpi">
+          <p>Recent Success (20)</p>
+          <h2 id="kpiRecentSuccessRate">0.00%</h2>
+        </article>
+        <article class="card kpi">
+          <p>Current Streak</p>
+          <h2 id="kpiCurrentStreak">0</h2>
+        </article>
+        <article class="card kpi">
+          <p>Best Streak</p>
+          <h2 id="kpiBestStreak">0</h2>
+        </article>
+        <article class="card kpi">
+          <p>Avg Major Damage / Hit</p>
+          <h2 id="kpiDamagePerBed">0.00</h2>
+        </article>
+        <article class="card kpi">
+          <p>Avg Success Time</p>
+          <h2 id="kpiSuccessTime">0.00s</h2>
+        </article>
+        <article class="card kpi">
+          <p>Best Success Time</p>
+          <h2 id="kpiBestTime">0.00s</h2>
+        </article>
+        <article class="card kpi">
+          <p>Median Success Time</p>
+          <h2 id="kpiMedianSuccessTime">0.00s</h2>
+        </article>
+        <article class="card kpi">
+          <p>Avg Rotations (Success)</p>
+          <h2 id="kpiAvgRotations">0.00</h2>
+        </article>
+        <article class="card kpi">
+          <p>Avg Total Explosives</p>
+          <h2 id="kpiAvgExplosives">0.00</h2>
+        </article>
+        <article class="card kpi">
+          <p>Perfect 2+2</p>
+          <h2 id="kpiPerfect22">0 (0.00%)</h2>
+        </article>
+        <article class="card kpi">
+          <p>Perfect 2+2 Rate</p>
+          <h2 id="kpiPerfectRate">0.00%</h2>
+        </article>
+      </section>
+
+      <section class="consistency-grid">
+        <article class="card mini">
+          <p>Last 10</p>
+          <h3 id="consistency10">0.00%</h3>
+        </article>
+        <article class="card mini">
+          <p>Last 25</p>
+          <h3 id="consistency25">0.00%</h3>
+        </article>
+        <article class="card mini">
+          <p>Last 50</p>
+          <h3 id="consistency50">0.00%</h3>
+        </article>
+      </section>
+
+      <section class="chart-grid">
+        <article class="card chart-card">
+          <h3>Session Consistency Progression</h3>
+          <canvas id="progressionChart"></canvas>
+        </article>
+        <article class="card chart-card">
+          <h3>Major Damage Per Hit Index</h3>
+          <canvas id="damageChart"></canvas>
+        </article>
+        <article class="card chart-card">
+          <h3>Rotations & Explosives Trend (Lower is Better)</h3>
+          <canvas id="efficiencyChart"></canvas>
+        </article>
+      </section>
+
+      <section class="chart-grid secondary">
+        <article class="card chart-card">
+          <h3>Attempt Time Series</h3>
+          <canvas id="timeSeriesChart"></canvas>
+        </article>
+        <article class="card chart-card">
+          <div class="chart-head-inline">
+            <h3>Rolling Success %</h3>
+            <div class="rolling-controls" id="rollingControls">
+              <button type="button" data-rolling-mode="r10">R10</button>
+              <button type="button" data-rolling-mode="r25">R25</button>
+              <button type="button" data-rolling-mode="r50" class="active">R50</button>
+              <button type="button" data-rolling-mode="all">All</button>
+            </div>
+          </div>
+          <canvas id="rollingConsistencyChart"></canvas>
+        </article>
+        <article class="card chart-card">
+          <h3>Success Time Distribution</h3>
+          <canvas id="speedBinsChart"></canvas>
+        </article>
+      </section>
+
+      <section class="chart-grid secondary">
+        <article class="card chart-card">
+          <h3>Attempts By Session</h3>
+          <canvas id="attemptsByHourChart"></canvas>
+        </article>
+        <article class="card chart-card">
+          <h3>Outcome Runs</h3>
+          <canvas id="outcomeRunsChart"></canvas>
+        </article>
+      </section>
+
+      <section class="chart-grid secondary two-col">
+        <article class="card chart-card">
+          <h3>Tower Spider (Back)</h3>
+          <canvas id="towerBackRadarChart"></canvas>
+        </article>
+        <article class="card chart-card">
+          <h3>Tower Spider (Front)</h3>
+          <canvas id="towerFrontRadarChart"></canvas>
+        </article>
+      </section>
+
+      <section class="table-grid">
+        <article class="card table-card">
+          <h3 id="towerTableTitle">Tower Performance</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Tower</th>
+                  <th>Side</th>
+                  <th>Attempts</th>
+                  <th>Success %</th>
+                  <th>Avg Time</th>
+                  <th>Avg Rot</th>
+                  <th>Avg Expl</th>
+                  <th>Avg Major Dmg/Hit</th>
+                </tr>
+              </thead>
+              <tbody id="towerTable"></tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="card table-card">
+          <h3 id="attemptTableTitle">Recent Attempts</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Timestamp</th>
+                  <th>Status</th>
+                  <th>Tower</th>
+                  <th>Side</th>
+                  <th>Damage Events</th>
+                  <th>Total Dmg</th>
+                  <th>Major Hits</th>
+                  <th>Explosives</th>
+                  <th>Run Time</th>
+                </tr>
+              </thead>
+              <tbody id="attemptTable"></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+    </main>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
