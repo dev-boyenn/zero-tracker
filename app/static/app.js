@@ -6,6 +6,7 @@ let rollingConsistencyChart;
 let speedBinsChart;
 let attemptsByHourChart;
 let outcomeRunsChart;
+let standingHeightConsistencyChart;
 let towerBackRadarChart;
 let towerFrontRadarChart;
 let selectedTower = "__GLOBAL__";
@@ -13,6 +14,7 @@ let selectedSide = "__GLOBAL__";
 let selectedWindow = "all";
 let includeOneEight = false;
 let selectedRotation = "both";
+let selectedSource = "mpk";
 let rollingMode = "r50";
 let lastPayload = null;
 const expandedTowerRows = new Set();
@@ -37,6 +39,133 @@ function formatNumMaybe(value) {
   return Number(value).toFixed(2);
 }
 
+function clamp(value, minValue, maxValue) {
+  return Math.min(maxValue, Math.max(minValue, value));
+}
+
+function oLevelColor(successRate) {
+  const pct = clamp(Number(successRate || 0), 0, 100);
+  const hue = 6 + pct * 1.3;
+  return `hsl(${hue}deg 82% 54%)`;
+}
+
+function renderOLevelHeatmap(matrix) {
+  const container = document.getElementById("oLevelHeatmap");
+  if (!container) return;
+  container.innerHTML = "";
+  const oLevels = Array.isArray(matrix?.o_levels) ? matrix.o_levels : [];
+  const rows = Array.isArray(matrix?.rows) ? matrix.rows : [];
+  if (oLevels.length === 0 || rows.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "o-heatmap-empty";
+    empty.textContent = "No O-level data yet.";
+    container.appendChild(empty);
+    return;
+  }
+  const table = document.createElement("table");
+  table.className = "o-heatmap-table";
+
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  const thTower = document.createElement("th");
+  thTower.className = "o-sticky-col";
+  thTower.textContent = "Tower";
+  headRow.appendChild(thTower);
+  for (const levelRaw of oLevels) {
+    const level = Number(levelRaw);
+    const th = document.createElement("th");
+    th.className = "o-level-head";
+    th.textContent = `O ${level}`;
+    headRow.appendChild(th);
+  }
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  for (const row of rows) {
+    const tr = document.createElement("tr");
+    const rowLabel = String(row.label || `${row.side || ""} ${row.tower_name || ""}`).trim();
+    const labelCell = document.createElement("td");
+    labelCell.className = "o-sticky-col o-row-name";
+    labelCell.textContent = rowLabel;
+    tr.appendChild(labelCell);
+
+    const rowCells = Array.isArray(row.cells) ? row.cells : [];
+    for (const cell of rowCells) {
+      const level = Number(cell.o_level);
+      const attempts = Number(cell.attempts || 0);
+      const successes = Number(cell.successes || 0);
+      const successRateRaw = cell.success_rate;
+      const hasData = attempts > 0 && successRateRaw !== null && successRateRaw !== undefined;
+      const successRate = hasData ? Number(successRateRaw) : 0;
+      const standingRows = Array.isArray(cell.standing_height_breakdown)
+        ? cell.standing_height_breakdown
+        : [];
+      const standingLines =
+        standingRows.length > 0
+          ? standingRows
+              .map((entry) => {
+                const y = Number(entry.standing_height);
+                const s = Number(entry.successes || 0);
+                const a = Number(entry.attempts || 0);
+                return `Y(${y}): ${s}/${a}`;
+              })
+              .join("\n")
+          : "No standing-height samples";
+      let bestStandingY = null;
+      if (standingRows.length > 0) {
+        let best = null;
+        for (const entry of standingRows) {
+          const curSuccesses = Number(entry.successes || 0);
+          const curAttempts = Number(entry.attempts || 0);
+          const curY = Number(entry.standing_height);
+          if (best === null) {
+            best = { successes: curSuccesses, attempts: curAttempts, y: curY };
+            continue;
+          }
+          if (curSuccesses > best.successes) {
+            best = { successes: curSuccesses, attempts: curAttempts, y: curY };
+            continue;
+          }
+          if (curSuccesses === best.successes && curAttempts > best.attempts) {
+            best = { successes: curSuccesses, attempts: curAttempts, y: curY };
+            continue;
+          }
+          if (
+            curSuccesses === best.successes &&
+            curAttempts === best.attempts &&
+            curY > best.y
+          ) {
+            best = { successes: curSuccesses, attempts: curAttempts, y: curY };
+          }
+        }
+        bestStandingY = best ? best.y : null;
+      }
+
+      const td = document.createElement("td");
+      td.className = `o-heat-cell${hasData ? "" : " is-empty"}`;
+      td.style.backgroundColor = hasData ? oLevelColor(successRate) : "rgba(120, 131, 143, 0.55)";
+      td.title = hasData
+        ? `${rowLabel} | O ${level}\n${successes}/${attempts} (${successRate.toFixed(
+            2
+          )}%)\n${standingLines}`
+        : `${rowLabel} | O ${level}\nNo attempts\nNo standing-height samples`;
+      if (hasData) {
+        const yText = bestStandingY === null ? "Y-" : `Y${bestStandingY}`;
+        td.innerHTML = `<div class="o-cell-wrap"><span class="o-cell-rate">${Math.round(
+          successRate
+        )}%</span><span class="o-cell-y">${yText}</span><span class="o-cell-attempts">${attempts} att</span></div>`;
+      } else {
+        td.textContent = "";
+      }
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  container.appendChild(table);
+}
+
 function sideFromType(zeroType) {
   const t = String(zeroType || "");
   if (t.startsWith("Front ")) return "Front";
@@ -59,6 +188,25 @@ function formatDateTime(value) {
 function renderPracticeNext(payload) {
   const widget = payload.practice_next || {};
   const rec = widget.recommended;
+  if (widget.disabled) {
+    setText("practiceNextMain", "What To Practice Next is disabled for MPK view.");
+    setText("practiceNextMeta", widget.disabled_reason || "");
+    setText("practiceNextCommand", "");
+    setText("practiceMissingTowers", "");
+    setText("practiceMissing18", "");
+    const copyBtn = document.getElementById("copyPracticeCommandBtn");
+    if (copyBtn) {
+      copyBtn.disabled = true;
+      copyBtn.textContent = "Copy";
+    }
+    const progressBar = document.getElementById("practiceDataProgressBar");
+    if (progressBar) progressBar.style.width = "0%";
+    const progressTextNode = document.getElementById("practiceDataProgressText");
+    if (progressTextNode) progressTextNode.textContent = "";
+    currentPracticeCommand = "";
+    lastPracticeTargetKey = "";
+    return;
+  }
   const windowSize = widget.window_size || 250;
   const copyBtn = document.getElementById("copyPracticeCommandBtn");
   const progressBar = document.getElementById("practiceDataProgressBar");
@@ -290,10 +438,24 @@ function updateFilters(payload) {
 }
 
 function ensureFilterDefaults() {
+  const sourceSelect = document.getElementById("sourceFilter");
   const windowSelect = document.getElementById("windowFilter");
   const rotationSelect = document.getElementById("rotationFilter");
   const towerSelect = document.getElementById("towerFilter");
   const sideSelect = document.getElementById("sideFilter");
+  if (sourceSelect && sourceSelect.options.length === 0) {
+    const options = [
+      ["all", "All Data"],
+      ["practice", "Practice Map"],
+      ["mpk", "MPK Seeds"],
+    ];
+    for (const [value, label] of options) {
+      const opt = document.createElement("option");
+      opt.value = value;
+      opt.textContent = label;
+      sourceSelect.appendChild(opt);
+    }
+  }
   if (rotationSelect && rotationSelect.options.length === 0) {
     const options = [
       ["both", "Both"],
@@ -445,13 +607,6 @@ function ensureCharts() {
             data: [],
             borderColor: "#4ad7a7",
             backgroundColor: "rgba(74, 215, 167, 0.15)",
-            tension: 0.25,
-          },
-          {
-            label: "First Bed (s)",
-            data: [],
-            borderColor: "#6ea8ff",
-            backgroundColor: "rgba(110, 168, 255, 0.15)",
             tension: 0.25,
           },
         ],
@@ -632,6 +787,52 @@ function ensureCharts() {
         },
       },
     });
+  }
+
+  if (!standingHeightConsistencyChart) {
+    standingHeightConsistencyChart = new Chart(
+      document.getElementById("standingHeightConsistencyChart"),
+      {
+        type: "bar",
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: "Attempts",
+              data: [],
+              backgroundColor: "rgba(247, 201, 108, 0.6)",
+              borderColor: "#f7c96c",
+              borderWidth: 1,
+            },
+            {
+              label: "Success Rate %",
+              data: [],
+              type: "line",
+              borderColor: "#4ad7a7",
+              backgroundColor: "rgba(74, 215, 167, 0.2)",
+              yAxisID: "y1",
+              tension: 0.25,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: "#e8f5ff" } } },
+          scales: {
+            x: { ticks: { color: "#c8deed" } },
+            y: { ticks: { color: "#c8deed" } },
+            y1: {
+              position: "right",
+              min: 0,
+              max: 100,
+              ticks: { color: "#c8deed" },
+              grid: { drawOnChartArea: false },
+            },
+          },
+        },
+      }
+    );
   }
 
   if (!towerBackRadarChart) {
@@ -818,6 +1019,7 @@ function renderAttemptTable(rows) {
     tr.innerHTML = `
       <td>${row.id}</td>
       <td>${formatDateTime(row.started_at_utc)}</td>
+      <td>${String(row.attempt_source || "practice").toUpperCase()}</td>
       <td class="status-${row.status}">${row.status}</td>
       <td>${row.tower_name || "Unknown"}</td>
       <td>${sideFromType(row.zero_type)}</td>
@@ -835,6 +1037,24 @@ function renderPayload(payload) {
   const isFirstRender = lastPayload === null;
   lastPayload = payload;
   ensureCharts();
+  const sourceSelect = document.getElementById("sourceFilter");
+  if (sourceSelect) {
+    const sourceOptions = payload.attempt_source_options || [];
+    const knownKeys = sourceOptions.map((o) => o.key);
+    if (sourceOptions.length > 0 && sourceSelect.options.length !== sourceOptions.length) {
+      sourceSelect.innerHTML = "";
+      for (const row of sourceOptions) {
+        const opt = document.createElement("option");
+        opt.value = row.key;
+        opt.textContent = row.label;
+        sourceSelect.appendChild(opt);
+      }
+    }
+    if (!knownKeys.includes(selectedSource)) {
+      selectedSource = payload.selected_attempt_source || "all";
+    }
+    sourceSelect.value = selectedSource;
+  }
   const includeToggle = document.getElementById("includeOneEight");
   if (includeToggle) {
     includeToggle.checked = includeOneEight;
@@ -919,7 +1139,6 @@ function renderPayload(payload) {
   timeSeriesChart.data.datasets[0].data = timeSeries.map((row) =>
     row.status === "success" ? row.success_time_seconds : null
   );
-  timeSeriesChart.data.datasets[1].data = timeSeries.map((row) => row.first_bed_seconds);
   timeSeriesChart.update("none");
 
   const rolling = scope.rolling_consistency_10 || [];
@@ -952,6 +1171,15 @@ function renderPayload(payload) {
     row.status === "success" ? "rgba(74, 215, 167, 0.7)" : "rgba(255, 117, 100, 0.7)"
   );
   outcomeRunsChart.update("none");
+
+  const oLevelMatrix = scope.o_level_heatmap || { o_levels: [], rows: [] };
+  renderOLevelHeatmap(oLevelMatrix);
+
+  const standingHeights = scope.standing_height_consistency || [];
+  standingHeightConsistencyChart.data.labels = standingHeights.map((row) => `Y ${row.standing_height}`);
+  standingHeightConsistencyChart.data.datasets[0].data = standingHeights.map((row) => row.attempts);
+  standingHeightConsistencyChart.data.datasets[1].data = standingHeights.map((row) => row.success_rate);
+  standingHeightConsistencyChart.update("none");
 
   const radar = payload.tower_radar || {};
   const backRows = radar.back || [];
@@ -1020,6 +1248,7 @@ function buildDashboardUrl(detail = "full") {
   params.set("include_1_8", includeOneEight ? "true" : "false");
   params.set("rotation", selectedRotation);
   params.set("window", selectedWindow);
+  params.set("attempt_source", selectedSource);
   if (selectedTower !== "__GLOBAL__") {
     params.set("tower", selectedTower);
   }
@@ -1039,12 +1268,25 @@ async function refresh(detail = "full") {
 
     const healthDot = document.getElementById("healthDot");
     const healthText = document.getElementById("healthText");
-    const alive = health.ok && health.log_exists;
+    const practiceAlive = !!(health.ok && health.log_exists);
+    const mpkAlive = !!(health.ok && health.mpk_enabled && health.mpk_log_exists);
+    const alive =
+      selectedSource === "practice"
+        ? practiceAlive
+        : selectedSource === "mpk"
+          ? mpkAlive
+          : (practiceAlive || mpkAlive);
     healthDot.className = `dot ${alive ? "dot-on" : "dot-off"}`;
     healthText.textContent = alive ? "Reader active" : "Log path not found";
+    const watchLabel =
+      selectedSource === "practice"
+        ? health.log_path
+        : selectedSource === "mpk"
+          ? health.mpk_log_path
+          : `${health.log_path} + ${health.mpk_log_path}`;
     setText(
       "lastUpdated",
-      `Updated ${new Date(payload.server_time_utc).toLocaleTimeString()} | Watching: ${payload.log_path}`
+      `Updated ${new Date(payload.server_time_utc).toLocaleTimeString()} | Watching: ${watchLabel}`
     );
   } catch (error) {
     setText("lastUpdated", `Dashboard fetch error: ${error}`);
@@ -1061,7 +1303,14 @@ async function refreshHealth() {
     const health = await healthRes.json();
     const healthDot = document.getElementById("healthDot");
     const healthText = document.getElementById("healthText");
-    const alive = health.ok && health.log_exists;
+    const practiceAlive = !!(health.ok && health.log_exists);
+    const mpkAlive = !!(health.ok && health.mpk_enabled && health.mpk_log_exists);
+    const alive =
+      selectedSource === "practice"
+        ? practiceAlive
+        : selectedSource === "mpk"
+          ? mpkAlive
+          : (practiceAlive || mpkAlive);
     healthDot.className = `dot ${alive ? "dot-on" : "dot-off"}`;
     healthText.textContent = alive ? "Reader active" : "Log path not found";
   } catch {
@@ -1119,6 +1368,16 @@ const rotationFilter = document.getElementById("rotationFilter");
 if (rotationFilter) {
   rotationFilter.addEventListener("change", (event) => {
     selectedRotation = event.target.value;
+    selectedTower = "__GLOBAL__";
+    selectedSide = "__GLOBAL__";
+    refresh("full");
+  });
+}
+
+const sourceFilter = document.getElementById("sourceFilter");
+if (sourceFilter) {
+  sourceFilter.addEventListener("change", (event) => {
+    selectedSource = event.target.value;
     selectedTower = "__GLOBAL__";
     selectedSide = "__GLOBAL__";
     refresh("full");

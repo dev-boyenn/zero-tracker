@@ -12,7 +12,15 @@ from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .attempt_tracker import AttemptTracker
-from config import DB_PATH, LOG_PATH, POLL_SECONDS, STATIC_DIR
+from config import (
+    DB_PATH,
+    LOG_PATH,
+    MPK_ENABLED,
+    MPK_LOG_PATH,
+    MPK_SAVES_DIR,
+    POLL_SECONDS,
+    STATIC_DIR,
+)
 from .database import Database
 from .log_watcher import (
     STATE_FILE_IDENTITY,
@@ -20,6 +28,7 @@ from .log_watcher import (
     STATE_LAST_HEARTBEAT,
     LogWatcher,
 )
+from .mpk_attempt_tracker import MpkAttemptTracker
 from .metrics import build_dashboard_payload_selected, compute_recent_attempts
 
 
@@ -31,18 +40,34 @@ def utc_now() -> str:
 async def lifespan(app: FastAPI):
     db = Database(DB_PATH)
     tracker = AttemptTracker(db)
-    watcher = LogWatcher(log_path=LOG_PATH, poll_seconds=POLL_SECONDS, db=db, tracker=tracker)
+    watcher = LogWatcher(log_path=LOG_PATH, poll_seconds=POLL_SECONDS, db=db, tracker=tracker, state_prefix="log_reader")
     watcher.start()
+    mpk_watcher: LogWatcher | None = None
+    if MPK_ENABLED:
+        mpk_tracker = MpkAttemptTracker(db=db, saves_dir=MPK_SAVES_DIR)
+        mpk_watcher = LogWatcher(
+            log_path=MPK_LOG_PATH,
+            poll_seconds=POLL_SECONDS,
+            db=db,
+            tracker=mpk_tracker,
+            state_prefix="mpk_log_reader",
+        )
+        mpk_watcher.start()
 
     app.state.db = db
     app.state.watcher = watcher
+    app.state.mpk_watcher = mpk_watcher
     app.state.started_at = utc_now()
     app.state.dashboard_cache = {}
     try:
         yield
     finally:
         watcher.stop()
+        if mpk_watcher is not None:
+            mpk_watcher.stop()
         watcher.join(timeout=2.0)
+        if mpk_watcher is not None:
+            mpk_watcher.join(timeout=2.0)
         db.close()
 
 
@@ -58,17 +83,27 @@ def index() -> FileResponse:
 @app.get("/api/health")
 def health(request: Request) -> dict[str, object]:
     db: Database = request.app.state.db
+    mpk_identity_key = "mpk_log_reader.file_identity"
+    mpk_position_key = "mpk_log_reader.file_position"
+    mpk_heartbeat_key = "mpk_log_reader.last_heartbeat_utc"
     return {
         "ok": True,
         "started_at": request.app.state.started_at,
         "now": utc_now(),
         "log_path": str(LOG_PATH),
+        "mpk_log_path": str(MPK_LOG_PATH),
+        "mpk_saves_dir": str(MPK_SAVES_DIR),
+        "mpk_enabled": MPK_ENABLED,
         "db_path": str(DB_PATH),
         "poll_seconds": POLL_SECONDS,
         "log_exists": LOG_PATH.exists(),
+        "mpk_log_exists": MPK_LOG_PATH.exists(),
         "reader_identity": db.get_state(STATE_FILE_IDENTITY, ""),
         "reader_position": int(db.get_state(STATE_FILE_POSITION, "0") or "0"),
         "last_heartbeat_utc": db.get_state(STATE_LAST_HEARTBEAT, ""),
+        "mpk_reader_identity": db.get_state(mpk_identity_key, ""),
+        "mpk_reader_position": int(db.get_state(mpk_position_key, "0") or "0"),
+        "mpk_last_heartbeat_utc": db.get_state(mpk_heartbeat_key, ""),
     }
 
 
@@ -78,8 +113,9 @@ def _normalize_filter(
     window: str,
     tower: str | None,
     side: str | None,
+    attempt_source: str,
     detail: str,
-) -> tuple[bool, str, str, str | None, str | None, str]:
+) -> tuple[bool, str, str, str | None, str | None, str, str]:
     rotation_norm = (rotation or "both").strip().lower()
     if rotation_norm not in {"both", "cw", "ccw"}:
         rotation_norm = "both"
@@ -89,11 +125,14 @@ def _normalize_filter(
     detail_norm = (detail or "full").strip().lower()
     if detail_norm not in {"light", "full"}:
         detail_norm = "full"
+    source_norm = (attempt_source or "practice").strip().lower()
+    if source_norm not in {"all", "practice", "mpk"}:
+        source_norm = "all"
     tower_norm = None if tower in {None, "", "__GLOBAL__"} else str(tower)
     side_norm = None if side in {None, "", "__GLOBAL__"} else str(side)
     if side_norm not in {None, "Front", "Back"}:
         side_norm = None
-    return (bool(include_1_8), rotation_norm, window_norm, tower_norm, side_norm, detail_norm)
+    return (bool(include_1_8), rotation_norm, window_norm, tower_norm, side_norm, source_norm, detail_norm)
 
 
 def _build_dashboard_payload_cached(
@@ -104,18 +143,19 @@ def _build_dashboard_payload_cached(
     window: str,
     tower: str | None,
     side: str | None,
+    attempt_source: str,
     detail: str,
 ) -> dict[str, Any]:
     db: Database = request.app.state.db
     cache: dict[Any, dict[str, Any]] = request.app.state.dashboard_cache
-    include_1_8, rotation, window, tower, side, detail = _normalize_filter(
-        include_1_8, rotation, window, tower, side, detail
+    include_1_8, rotation, window, tower, side, attempt_source, detail = _normalize_filter(
+        include_1_8, rotation, window, tower, side, attempt_source, detail
     )
     data_version_row = db.query_one("PRAGMA data_version")
     data_version = int(data_version_row[0]) if data_version_row is not None else 0
     max_attempt_row = db.query_one("SELECT COALESCE(MAX(id), 0) AS max_id FROM attempts")
     max_attempt_id = int(max_attempt_row["max_id"]) if max_attempt_row is not None else 0
-    cache_key = (detail, include_1_8, rotation, window, tower, side, data_version, max_attempt_id)
+    cache_key = (detail, include_1_8, rotation, window, tower, side, attempt_source, data_version, max_attempt_id)
     now = time.time()
     entry = cache.get(cache_key)
     if entry is not None and float(entry.get("expires_at", 0.0)) > now:
@@ -128,6 +168,7 @@ def _build_dashboard_payload_cached(
             window=window,
             tower_name=tower,
             front_back=side,
+            attempt_source=attempt_source,
             detail=detail,
         )
         ttl = 0.4 if detail == "light" else 1.2
@@ -150,6 +191,7 @@ def dashboard(
     window: str = Query(default="all"),
     tower: str | None = Query(default=None),
     side: str | None = Query(default=None),
+    attempt_source: str = Query(default="practice"),
     detail: str = Query(default="full"),
 ) -> dict[str, object]:
     return _build_dashboard_payload_cached(
@@ -159,6 +201,7 @@ def dashboard(
         window=window,
         tower=tower,
         side=side,
+        attempt_source=attempt_source,
         detail=detail,
     )
 
@@ -171,6 +214,7 @@ def stream(
     window: str = Query(default="all"),
     tower: str | None = Query(default=None),
     side: str | None = Query(default=None),
+    attempt_source: str = Query(default="practice"),
     detail: str = Query(default="light"),
 ) -> StreamingResponse:
 
@@ -183,6 +227,7 @@ def stream(
                 window=window,
                 tower=tower,
                 side=side,
+                attempt_source=attempt_source,
                 detail=detail,
             )
             yield f"data: {json.dumps(payload)}\n\n"

@@ -60,6 +60,9 @@ class Database:
             setup_damage_total INTEGER NOT NULL DEFAULT 0,
             setup_hit_count INTEGER NOT NULL DEFAULT 0,
             max_damage_single_bed INTEGER NOT NULL DEFAULT 0,
+            attempt_source TEXT NOT NULL DEFAULT 'practice',
+            o_level INTEGER,
+            world_name TEXT,
             created_at TEXT NOT NULL,
             FOREIGN KEY(started_event_id) REFERENCES raw_log_events(id)
         );
@@ -72,7 +75,6 @@ class Database:
             ON attempts (status, id);
         CREATE INDEX IF NOT EXISTS idx_attempts_scope
             ON attempts (id, status, tower_name, zero_type, started_at_utc);
-
         CREATE TABLE IF NOT EXISTS attempt_beds (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             attempt_id INTEGER NOT NULL,
@@ -131,6 +133,9 @@ class Database:
             ("attempts", "major_hit_count", "INTEGER NOT NULL DEFAULT 0"),
             ("attempts", "setup_damage_total", "INTEGER NOT NULL DEFAULT 0"),
             ("attempts", "setup_hit_count", "INTEGER NOT NULL DEFAULT 0"),
+            ("attempts", "attempt_source", "TEXT NOT NULL DEFAULT 'practice'"),
+            ("attempts", "o_level", "INTEGER"),
+            ("attempts", "world_name", "TEXT"),
             ("attempt_beds", "damage_kind", "TEXT NOT NULL DEFAULT 'unknown'"),
             ("attempt_beds", "is_major", "INTEGER NOT NULL DEFAULT 0"),
         ]
@@ -197,6 +202,32 @@ class Database:
             """
             CREATE INDEX IF NOT EXISTS idx_attempt_beds_kind
             ON attempt_beds (damage_kind)
+            """
+        )
+        self._conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_attempts_source_started
+            ON attempts (attempt_source, started_at_utc)
+            """
+        )
+        # Keep MPK tower names aligned with practice-map naming.
+        self._conn.execute(
+            """
+            UPDATE attempts
+            SET tower_name = CASE
+                WHEN COALESCE(CAST(tower_code AS INTEGER), standing_height) = 76 THEN 'Small Boy'
+                WHEN COALESCE(CAST(tower_code AS INTEGER), standing_height) = 79 THEN 'Small Cage'
+                WHEN COALESCE(CAST(tower_code AS INTEGER), standing_height) = 82 THEN 'Tall Cage'
+                WHEN COALESCE(CAST(tower_code AS INTEGER), standing_height) = 85 THEN 'M-85'
+                WHEN COALESCE(CAST(tower_code AS INTEGER), standing_height) = 88 THEN 'M-88'
+                WHEN COALESCE(CAST(tower_code AS INTEGER), standing_height) = 91 THEN 'M-91'
+                WHEN COALESCE(CAST(tower_code AS INTEGER), standing_height) = 94 THEN 'T-94'
+                WHEN COALESCE(CAST(tower_code AS INTEGER), standing_height) = 97 THEN 'T-97'
+                WHEN COALESCE(CAST(tower_code AS INTEGER), standing_height) = 100 THEN 'T-100'
+                WHEN COALESCE(CAST(tower_code AS INTEGER), standing_height) = 103 THEN 'Tall Boy'
+                ELSE tower_name
+            END
+            WHERE COALESCE(attempt_source, 'practice') = 'mpk'
             """
         )
 

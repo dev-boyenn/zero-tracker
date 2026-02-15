@@ -60,7 +60,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run Zero Cycle Dashboard and close browser on Ctrl+C.")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
-    parser.add_argument("--no-browser", action="store_true")
+    parser.add_argument("--no-browser", action="store_true", default=True)
     args = parser.parse_args()
 
     root = Path(__file__).resolve().parent

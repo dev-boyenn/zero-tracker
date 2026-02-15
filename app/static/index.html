@@ -24,6 +24,12 @@
           <p id="lastUpdated">Waiting for data...</p>
         </div>
         <div class="health">
+          <label for="sourceFilter">Data</label>
+          <select id="sourceFilter">
+            <option value="all">All Data</option>
+            <option value="practice">Practice Map</option>
+            <option value="mpk">MPK Seeds</option>
+          </select>
           <label for="includeOneEight">Include 1/8</label>
           <input id="includeOneEight" type="checkbox" />
           <label for="windowFilter">Window</label>
@@ -190,6 +196,22 @@
           <h3>Outcome Runs</h3>
           <canvas id="outcomeRunsChart"></canvas>
         </article>
+        <article class="card chart-card">
+          <h3>Standing Height Consistency</h3>
+          <canvas id="standingHeightConsistencyChart"></canvas>
+        </article>
+      </section>
+
+      <section class="heatmap-section">
+        <article class="card heatmap-card">
+          <h3>Tower x O-Level Consistency Heatmap</h3>
+          <div id="oLevelHeatmap" class="o-heatmap"></div>
+          <div class="o-heatmap-legend">
+            <span class="o-leg-item"><i class="o-leg-box o-leg-red"></i>Lower consistency</span>
+            <span class="o-leg-item"><i class="o-leg-box o-leg-green"></i>Higher consistency</span>
+            <span class="o-leg-item"><i class="o-leg-box o-leg-gray"></i>No attempts</span>
+          </div>
+        </article>
       </section>
 
       <section class="chart-grid secondary two-col">
@@ -233,6 +255,7 @@
                 <tr>
                   <th>ID</th>
                   <th>Timestamp</th>
+                  <th>Source</th>
                   <th>Status</th>
                   <th>Tower</th>
                   <th>Side</th>

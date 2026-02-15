@@ -10,6 +10,7 @@ WINDOW_MIN_ID_CTX: ContextVar[int | None] = ContextVar("window_min_id", default=
 WINDOW_START_UTC_CTX: ContextVar[str | None] = ContextVar("window_start_utc", default=None)
 INCLUDE_STRAIGHT_CTX: ContextVar[bool] = ContextVar("include_straight", default=True)
 ROTATION_FILTER_CTX: ContextVar[str] = ContextVar("rotation_filter", default="both")
+ATTEMPT_SOURCE_CTX: ContextVar[str] = ContextVar("attempt_source_filter", default="all")
 
 
 def _safe_int(value: Any) -> int:
@@ -69,6 +70,10 @@ def _scope_where(
         )
     elif rotation_filter == "ccw":
         clauses.append("UPPER(COALESCE(zero_type, '')) LIKE '%CCW'")
+    attempt_source = ATTEMPT_SOURCE_CTX.get()
+    if attempt_source in {"practice", "mpk"}:
+        clauses.append("COALESCE(attempt_source, 'practice') = ?")
+        params.append(attempt_source)
 
     window_min_id = WINDOW_MIN_ID_CTX.get()
     if window_min_id is not None:
@@ -199,6 +204,14 @@ def _compute_window_bounds(db: Database) -> dict[str, dict[str, Any]]:
 
 
 def compute_practice_next_widget(db: Database) -> dict[str, Any]:
+    if ATTEMPT_SOURCE_CTX.get() != "practice":
+        return {
+            "disabled": True,
+            "disabled_reason": "Practice recommendations are only available for practice-map data.",
+            "recommended": None,
+            "window_size": 250,
+        }
+
     lock_key = "practice_next.lock_target"
     lock_anchor_key = "practice_next.lock_anchor_attempt_id"
     min_streak_to_swap = 3
@@ -875,6 +888,7 @@ def build_dashboard_payload_selected(
     window: str = "all",
     tower_name: str | None = None,
     front_back: str | None = None,
+    attempt_source: str = "practice",
     detail: str = "full",
 ) -> dict[str, Any]:
     detail = detail.lower().strip()
@@ -886,9 +900,13 @@ def build_dashboard_payload_selected(
     window = window.lower().strip()
     if window not in {"all", "current_session", "last_10", "last_25", "last_50", "last_100"}:
         window = "all"
+    attempt_source = attempt_source.lower().strip()
+    if attempt_source not in {"all", "practice", "mpk"}:
+        attempt_source = "all"
 
     tok_straight = INCLUDE_STRAIGHT_CTX.set(include_1_8)
     tok_rotation = ROTATION_FILTER_CTX.set(rotation)
+    tok_source = ATTEMPT_SOURCE_CTX.set(attempt_source)
     try:
         bounds_by_window = _compute_window_bounds(db)
         bounds = bounds_by_window.get(window, {"min_id": None, "start_utc": None})
@@ -967,6 +985,15 @@ def build_dashboard_payload_selected(
                         "attempts_by_session": compute_attempts_by_session(
                             db, tower_name=tower_name, front_back=front_back
                         ),
+                        "o_level_consistency": compute_o_level_consistency(
+                            db, tower_name=tower_name, front_back=front_back
+                        ),
+                        "o_level_heatmap": compute_o_level_heatmap(
+                            db, tower_name=tower_name, front_back=front_back
+                        ),
+                        "standing_height_consistency": compute_standing_height_consistency(
+                            db, tower_name=tower_name, front_back=front_back
+                        ),
                         "recent_attempts": compute_recent_attempts(
                             db, limit=60, tower_name=tower_name, front_back=front_back
                         ),
@@ -986,6 +1013,9 @@ def build_dashboard_payload_selected(
                         "outcome_runs": {"runs": [], "best_success_run": 0, "best_fail_run": 0},
                         "speed_bins": [],
                         "attempts_by_session": [],
+                        "o_level_consistency": [],
+                        "o_level_heatmap": [],
+                        "standing_height_consistency": [],
                         "recent_attempts": [],
                     }
                 )
@@ -1000,6 +1030,12 @@ def build_dashboard_payload_selected(
                 "selected_window": window,
                 "selected_rotation": rotation,
                 "selected_include_1_8": include_1_8,
+                "selected_attempt_source": attempt_source,
+                "attempt_source_options": [
+                    {"key": "all", "label": "All Data"},
+                    {"key": "practice", "label": "Practice Map"},
+                    {"key": "mpk", "label": "MPK Seeds"},
+                ],
                 "detail": detail,
                 "practice_next": compute_practice_next_widget(db),
             }
@@ -1010,6 +1046,7 @@ def build_dashboard_payload_selected(
     finally:
         ROTATION_FILTER_CTX.reset(tok_rotation)
         INCLUDE_STRAIGHT_CTX.reset(tok_straight)
+        ATTEMPT_SOURCE_CTX.reset(tok_source)
 
 
 def compute_tower_performance(
@@ -1192,6 +1229,7 @@ def compute_recent_attempts(
         f"""
         SELECT
             id,
+            COALESCE(attempt_source, 'practice') AS attempt_source,
             status,
             fail_reason,
             started_at_utc,
@@ -1208,7 +1246,8 @@ def compute_recent_attempts(
             bed_count,
             total_damage,
             major_damage_total,
-            major_hit_count
+            major_hit_count,
+            o_level
         FROM attempts
         {where}
         ORDER BY id DESC
@@ -1234,6 +1273,7 @@ def compute_recent_attempts(
         result.append(
             {
                 "id": _safe_int(row["id"]),
+                "attempt_source": str(row["attempt_source"] or "practice"),
                 "status": row["status"],
                 "fail_reason": row["fail_reason"],
                 "started_at_utc": row["started_at_utc"],
@@ -1253,6 +1293,7 @@ def compute_recent_attempts(
                 "total_damage": total_damage,
                 "major_hit_count": major_hit_count,
                 "major_damage_per_hit": round(major_damage_per_hit, 2),
+                "o_level": _safe_int(row["o_level"]) if row["o_level"] is not None else None,
             }
         )
     return result
@@ -1766,6 +1807,275 @@ def compute_attempts_by_session(
     ]
 
 
+def compute_o_level_consistency(
+    db: Database,
+    zero_type: str | None = None,
+    tower_name: str | None = None,
+    front_back: str | None = None,
+) -> list[dict[str, Any]]:
+    where, params = _scope_where(
+        zero_type=zero_type, tower_name=tower_name, front_back=front_back, include_where=False
+    )
+    rows = db.query_all(
+        f"""
+        SELECT
+            o_level,
+            COUNT(*) AS attempts,
+            SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS successes,
+            AVG(CASE WHEN status = 'success' THEN success_time_seconds END) AS avg_success_time
+        FROM attempts
+        WHERE status IN ('success', 'fail')
+          AND o_level IS NOT NULL{where}
+        GROUP BY o_level
+        ORDER BY o_level ASC
+        """,
+        params,
+    )
+    result: list[dict[str, Any]] = []
+    for row in rows:
+        attempts = _safe_int(row["attempts"])
+        successes = _safe_int(row["successes"])
+        result.append(
+            {
+                "o_level": _safe_int(row["o_level"]),
+                "attempts": attempts,
+                "successes": successes,
+                "success_rate": round(_pct(successes, attempts), 2),
+                "avg_success_time_seconds": round(_safe_float(row["avg_success_time"]), 2),
+            }
+        )
+    return result
+
+
+def compute_o_level_heatmap(
+    db: Database,
+    zero_type: str | None = None,
+    tower_name: str | None = None,
+    front_back: str | None = None,
+    *,
+    default_min: int = 52,
+    default_max: int = 59,
+    hard_min: int = 45,
+    hard_max: int = 70,
+) -> dict[str, Any]:
+    where, params = _scope_where(
+        zero_type=zero_type, tower_name=tower_name, front_back=front_back, include_where=False
+    )
+    rows = db.query_all(
+        f"""
+        SELECT
+            COALESCE(tower_name, 'Unknown') AS tower_name,
+            CASE
+                WHEN COALESCE(zero_type, '') LIKE 'Front %' THEN 'Front'
+                WHEN COALESCE(zero_type, '') LIKE 'Back %' THEN 'Back'
+                ELSE 'Unknown'
+            END AS side,
+            o_level,
+            COUNT(*) AS attempts,
+            SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS successes
+        FROM attempts
+        WHERE status IN ('success', 'fail')
+          AND o_level IS NOT NULL
+          AND COALESCE(tower_name, 'Unknown') <> 'Unknown'{where}
+        GROUP BY COALESCE(tower_name, 'Unknown'), side, o_level
+        ORDER BY side ASC, tower_name ASC, o_level ASC
+        """,
+        params,
+    )
+    standing_rows = db.query_all(
+        f"""
+        SELECT
+            COALESCE(tower_name, 'Unknown') AS tower_name,
+            CASE
+                WHEN COALESCE(zero_type, '') LIKE 'Front %' THEN 'Front'
+                WHEN COALESCE(zero_type, '') LIKE 'Back %' THEN 'Back'
+                ELSE 'Unknown'
+            END AS side,
+            o_level,
+            standing_height,
+            COUNT(*) AS attempts,
+            SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS successes
+        FROM attempts
+        WHERE status IN ('success', 'fail')
+          AND o_level IS NOT NULL
+          AND standing_height IS NOT NULL
+          AND COALESCE(tower_name, 'Unknown') <> 'Unknown'{where}
+        GROUP BY COALESCE(tower_name, 'Unknown'), side, o_level, standing_height
+        ORDER BY side ASC, tower_name ASC, o_level ASC, standing_height ASC
+        """,
+        params,
+    )
+    expected_towers = [
+        "Small Boy",
+        "Small Cage",
+        "Tall Cage",
+        "M-85",
+        "M-88",
+        "M-91",
+        "T-94",
+        "T-97",
+        "T-100",
+        "Tall Boy",
+    ]
+    side_order = {"Front": 0, "Back": 1}
+    tower_order = {name: idx for idx, name in enumerate(expected_towers)}
+
+    def _allowed_combo(combo_tower: str, combo_side: str) -> bool:
+        if combo_side not in {"Front", "Back"}:
+            return False
+        if tower_name is not None and combo_tower != tower_name:
+            return False
+        if front_back is not None and combo_side != front_back:
+            return False
+        return True
+
+    by_combo_level: dict[tuple[str, str], dict[int, dict[str, int]]] = {}
+    standing_by_combo_level: dict[tuple[str, str], dict[int, list[dict[str, int]]]] = {}
+    min_seen: int | None = None
+    max_seen: int | None = None
+    for row in rows:
+        combo_tower = str(row["tower_name"])
+        combo_side = str(row["side"])
+        if not _allowed_combo(combo_tower, combo_side):
+            continue
+        level = _safe_int(row["o_level"])
+        attempts = _safe_int(row["attempts"])
+        successes = _safe_int(row["successes"])
+        combo_key = (combo_tower, combo_side)
+        if combo_key not in by_combo_level:
+            by_combo_level[combo_key] = {}
+        by_combo_level[combo_key][level] = {"attempts": attempts, "successes": successes}
+        min_seen = level if min_seen is None else min(min_seen, level)
+        max_seen = level if max_seen is None else max(max_seen, level)
+    for row in standing_rows:
+        combo_tower = str(row["tower_name"])
+        combo_side = str(row["side"])
+        if not _allowed_combo(combo_tower, combo_side):
+            continue
+        level = _safe_int(row["o_level"])
+        standing = _safe_int(row["standing_height"])
+        attempts = _safe_int(row["attempts"])
+        successes = _safe_int(row["successes"])
+        combo_key = (combo_tower, combo_side)
+        if combo_key not in standing_by_combo_level:
+            standing_by_combo_level[combo_key] = {}
+        if level not in standing_by_combo_level[combo_key]:
+            standing_by_combo_level[combo_key][level] = []
+        standing_by_combo_level[combo_key][level].append(
+            {
+                "standing_height": standing,
+                "attempts": attempts,
+                "successes": successes,
+            }
+        )
+
+    if min_seen is None or max_seen is None:
+        min_level = default_min
+        max_level = default_max
+    else:
+        min_level = max(hard_min, min(default_min, min_seen))
+        max_level = min(hard_max, max(default_max, max_seen))
+
+    o_levels = list(range(min_level, max_level + 1))
+
+    combo_keys: set[tuple[str, str]] = set()
+    for side in ("Front", "Back"):
+        for expected_tower in expected_towers:
+            if _allowed_combo(expected_tower, side):
+                combo_keys.add((expected_tower, side))
+    combo_keys.update(by_combo_level.keys())
+    combo_keys = {combo for combo in combo_keys if _allowed_combo(combo[0], combo[1])}
+    sorted_combos = sorted(
+        combo_keys,
+        key=lambda combo: (
+            side_order.get(combo[1], 99),
+            tower_order.get(combo[0], 999),
+            combo[0],
+        ),
+    )
+
+    matrix_rows: list[dict[str, Any]] = []
+    for combo_tower, combo_side in sorted_combos:
+        level_buckets = by_combo_level.get((combo_tower, combo_side), {})
+        standing_buckets = standing_by_combo_level.get((combo_tower, combo_side), {})
+        cells: list[dict[str, Any]] = []
+        row_attempts = 0
+        row_successes = 0
+        for level in o_levels:
+            bucket = level_buckets.get(level, {"attempts": 0, "successes": 0})
+            attempts = int(bucket["attempts"])
+            successes = int(bucket["successes"])
+            row_attempts += attempts
+            row_successes += successes
+            cells.append(
+                {
+                    "o_level": level,
+                    "attempts": attempts,
+                    "successes": successes,
+                    "success_rate": round(_pct(successes, attempts), 2) if attempts > 0 else None,
+                    "standing_height_breakdown": standing_buckets.get(level, []),
+                }
+            )
+        matrix_rows.append(
+            {
+                "tower_name": combo_tower,
+                "side": combo_side,
+                "label": f"{combo_side} {combo_tower}",
+                "attempts": row_attempts,
+                "successes": row_successes,
+                "success_rate": round(_pct(row_successes, row_attempts), 2)
+                if row_attempts > 0
+                else None,
+                "cells": cells,
+            }
+        )
+
+    return {
+        "o_levels": o_levels,
+        "rows": matrix_rows,
+    }
+
+
+def compute_standing_height_consistency(
+    db: Database,
+    zero_type: str | None = None,
+    tower_name: str | None = None,
+    front_back: str | None = None,
+) -> list[dict[str, Any]]:
+    where, params = _scope_where(
+        zero_type=zero_type, tower_name=tower_name, front_back=front_back, include_where=False
+    )
+    rows = db.query_all(
+        f"""
+        SELECT
+            standing_height,
+            COUNT(*) AS attempts,
+            SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS successes,
+            AVG(CASE WHEN status = 'success' THEN success_time_seconds END) AS avg_success_time
+        FROM attempts
+        WHERE status IN ('success', 'fail')
+          AND standing_height IS NOT NULL{where}
+        GROUP BY standing_height
+        ORDER BY standing_height ASC
+        """,
+        params,
+    )
+    result: list[dict[str, Any]] = []
+    for row in rows:
+        attempts = _safe_int(row["attempts"])
+        successes = _safe_int(row["successes"])
+        result.append(
+            {
+                "standing_height": _safe_int(row["standing_height"]),
+                "attempts": attempts,
+                "successes": successes,
+                "success_rate": round(_pct(successes, attempts), 2),
+                "avg_success_time_seconds": round(_safe_float(row["avg_success_time"]), 2),
+            }
+        )
+    return result
+
+
 def compute_tower_front_back_overview(db: Database) -> list[dict[str, Any]]:
     where, params = _scope_where(include_where=True)
     rows = db.query_all(
@@ -1808,18 +2118,19 @@ def compute_tower_front_back_overview(db: Database) -> list[dict[str, Any]]:
 
 
 def compute_tower_radar(db: Database) -> dict[str, Any]:
+    where_extra, params = _scope_where(include_where=False)
     # Keep a stable tower list so both Front/Back charts always show all known towers.
     all_towers_rows = db.query_all(
-        """
+        f"""
         SELECT DISTINCT COALESCE(tower_name, 'Unknown') AS tower_name
         FROM attempts
-        WHERE COALESCE(tower_name, 'Unknown') <> 'Unknown'
+        WHERE COALESCE(tower_name, 'Unknown') <> 'Unknown'{where_extra}
         ORDER BY tower_name ASC
-        """
+        """,
+        params,
     )
     all_towers = [str(r["tower_name"]) for r in all_towers_rows]
 
-    where_extra, params = _scope_where(include_where=False)
     rows = db.query_all(
         f"""
         SELECT

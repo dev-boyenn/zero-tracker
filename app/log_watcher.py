@@ -4,8 +4,8 @@ import threading
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
-from .attempt_tracker import AttemptTracker
 from .database import Database
 from .log_parser import parse_log_line
 
@@ -19,24 +19,35 @@ def utc_now() -> str:
 
 
 class LogWatcher(threading.Thread):
-    def __init__(self, log_path: Path, poll_seconds: float, db: Database, tracker: AttemptTracker) -> None:
+    def __init__(
+        self,
+        log_path: Path,
+        poll_seconds: float,
+        db: Database,
+        tracker: Any,
+        state_prefix: str = "log_reader",
+    ) -> None:
         super().__init__(daemon=True, name="zero-cycle-log-watcher")
         self.log_path = log_path
         self.poll_seconds = poll_seconds
         self.db = db
         self.tracker = tracker
+        self.state_prefix = state_prefix.strip() or "log_reader"
+        self.state_file_identity = f"{self.state_prefix}.file_identity"
+        self.state_file_position = f"{self.state_prefix}.file_position"
+        self.state_last_heartbeat = f"{self.state_prefix}.last_heartbeat_utc"
         self.stop_event = threading.Event()
 
     def stop(self) -> None:
         self.stop_event.set()
 
     def run(self) -> None:
-        position = int(self.db.get_state(STATE_FILE_POSITION, "0") or "0")
-        identity = self.db.get_state(STATE_FILE_IDENTITY, "")
+        position = int(self.db.get_state(self.state_file_position, "0") or "0")
+        identity = self.db.get_state(self.state_file_identity, "")
 
         while not self.stop_event.is_set():
             if not self.log_path.exists():
-                self.db.set_state(STATE_LAST_HEARTBEAT, utc_now())
+                self.db.set_state(self.state_last_heartbeat, utc_now())
                 time.sleep(self.poll_seconds)
                 continue
 
@@ -53,7 +64,7 @@ class LogWatcher(threading.Thread):
             if not same_file:
                 identity = current_identity
                 position = 0
-                self.db.set_state(STATE_FILE_IDENTITY, identity)
+                self.db.set_state(self.state_file_identity, identity)
 
             if stat.st_size < position:
                 position = 0
@@ -68,8 +79,8 @@ class LogWatcher(threading.Thread):
                     position = handle.tell()
                     self._ingest_line(raw_line=line.rstrip("\r\n"), file_offset=line_start)
 
-            self.db.set_state(STATE_FILE_POSITION, str(position))
-            self.db.set_state(STATE_LAST_HEARTBEAT, utc_now())
+            self.db.set_state(self.state_file_position, str(position))
+            self.db.set_state(self.state_last_heartbeat, utc_now())
             time.sleep(self.poll_seconds)
 
     def _ingest_line(self, raw_line: str, file_offset: int) -> None:
