@@ -154,16 +154,25 @@ class MpkInjector:
                 return custom.resolve(), None
             return None, f"ZERO_DASH_ATUM_JAR_PATH does not exist: {custom}"
 
+        root_jars = [
+            p
+            for p in self.project_root.glob("atum*.jar")
+            if p.is_file() and "sources" not in p.name.lower()
+        ]
+        if root_jars:
+            root_jars.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+            return root_jars[0].resolve(), None
+
         libs_dir = self.project_root / "atum" / "build" / "libs"
         if not libs_dir.exists():
-            return None, f"Atum libs directory not found: {libs_dir}"
+            return None, f"No repo-root Atum jar found and libs directory not found: {libs_dir}"
         jars = [
             p
             for p in libs_dir.glob("atum*.jar")
             if p.is_file() and "sources" not in p.name.lower()
         ]
         if not jars:
-            return None, f"No built Atum jar found in {libs_dir}"
+            return None, f"No Atum jar found in repo root or {libs_dir}"
         jars.sort(key=lambda p: p.stat().st_mtime, reverse=True)
         return jars[0].resolve(), None
 
