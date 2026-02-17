@@ -22,10 +22,15 @@ let lastHealth = null;
 let leniencyRefreshTimer = null;
 const expandedTowerRows = new Set();
 let currentPracticeCommand = "";
-let lastPracticeTargetKey = "";
 let practiceAudioCtx = null;
 let lockedMpkTargets = new Set();
 let lockRequestInFlight = false;
+let lastWeakLockState = {
+  lockActive: false,
+  targetKey: "",
+  streak: 0,
+  minStreak: 3,
+};
 
 function formatPct(value) {
   return `${Number(value || 0).toFixed(2)}%`;
@@ -411,7 +416,7 @@ function renderPracticeNext(payload) {
     const progressTextNode = document.getElementById("practiceDataProgressText");
     if (progressTextNode) progressTextNode.textContent = "";
     currentPracticeCommand = "";
-    lastPracticeTargetKey = "";
+    lastWeakLockState = { lockActive: false, targetKey: "", streak: 0, minStreak: 3 };
     return;
   }
   const windowSize = widget.window_size || 250;
@@ -454,7 +459,7 @@ function renderPracticeNext(payload) {
     setText("practiceNextMeta", "");
     setText("practiceNextCommand", "");
     currentPracticeCommand = "";
-    lastPracticeTargetKey = "";
+    lastWeakLockState = { lockActive: false, targetKey: "", streak: 0, minStreak: 3 };
     if (copyBtn) {
       copyBtn.disabled = true;
       copyBtn.textContent = "Copy";
@@ -464,13 +469,6 @@ function renderPracticeNext(payload) {
     updateMpkLockControls(widget);
     return;
   }
-  const currentTargetKey =
-    rec.target_kind === "mpk_zero"
-      ? `${rec.tower_name}|${rec.side}|${Number(rec.o_level || -1)}`
-      : `${rec.tower_name}|${rec.side}|${rec.rotation}`;
-  const shouldPlaySwitchSound =
-    lastPracticeTargetKey && currentTargetKey !== lastPracticeTargetKey;
-  lastPracticeTargetKey = currentTargetKey;
   if (rec.target_kind === "full_random") {
     if (commandRow) commandRow.style.display = "";
     if (soundBtn) soundBtn.style.display = "";
@@ -590,10 +588,34 @@ function renderPracticeNext(payload) {
         : `All observed 1/8 groups were attempted in last ${windowSize}.`
     );
   }
-  updateMpkLockControls(widget);
-  if (shouldPlaySwitchSound) {
+  const currentPractice = widget.current_practice || null;
+  const currentMode = String((currentPractice && currentPractice.selection_mode) || "").toLowerCase();
+  const weakLockActiveNow = currentMode === "weak" && !!(currentPractice && currentPractice.weak_lock_active);
+  const weakTargetKeyNow = weakLockActiveNow ? String(currentPractice.target_key || "") : "";
+  const weakStreakNow = weakLockActiveNow ? Number(currentPractice.weak_streak || 0) : 0;
+  const weakMinNow = weakLockActiveNow
+    ? Number(currentPractice.weak_min_streak || widget.min_streak_to_swap || 3)
+    : Number(widget.min_streak_to_swap || 3);
+  const weakJustCompleted =
+    lastWeakLockState.lockActive &&
+    (!weakLockActiveNow || weakTargetKeyNow !== lastWeakLockState.targetKey) &&
+    Number(lastWeakLockState.streak || 0) >= Number(lastWeakLockState.minStreak || 3);
+
+  if (weakJustCompleted) {
     playPracticeSwitchSound();
   }
+  if (weakLockActiveNow) {
+    lastWeakLockState = {
+      lockActive: true,
+      targetKey: weakTargetKeyNow,
+      streak: weakStreakNow,
+      minStreak: weakMinNow,
+    };
+  } else {
+    lastWeakLockState = { lockActive: false, targetKey: "", streak: 0, minStreak: weakMinNow };
+  }
+
+  updateMpkLockControls(widget);
 }
 
 function applyRollingMode() {

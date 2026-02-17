@@ -772,13 +772,15 @@ def _store_recent_mpk_targets(db: Database, keys: list[str], *, max_items: int =
 
 
 def _mpk_mode_schedule(coverage_percent: float) -> list[str]:
-    if coverage_percent < 50.0:
+    if coverage_percent < 25.0:
         return ["fill"] * 10
+    if coverage_percent < 50.0:
+        return ["fill"] * 9 + ["weak"] * 1
     if coverage_percent < 80.0:
-        return ["fill"] * 5 + ["weak"] * 1 + ["maintain"] * 4
+        return ["fill"] * 5 + ["weak"] * 3 + ["maintain"] * 2
     if coverage_percent < 95.0:
-        return ["fill"] * 3 + ["weak"] * 2 + ["maintain"] * 5
-    return ["fill"] * 1 + ["weak"] * 4 + ["maintain"] * 5
+        return ["fill"] * 3 + ["weak"] * 5 + ["maintain"] * 2
+    return ["fill"] * 1 + ["weak"] * 5 + ["maintain"] * 4
 
 
 def _candidate_sort_key(candidate: dict[str, Any]) -> tuple[int, int, int]:
