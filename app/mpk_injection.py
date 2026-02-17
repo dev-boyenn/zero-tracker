@@ -32,6 +32,9 @@ class MpkInjectionToken:
     disabled_ranked_mods: list[tuple[Path, Path]]
     fast_reset_config_path: Path | None
     fast_reset_backup_path: Path | None
+    recipe_book_target_path: Path
+    recipe_book_backup_path: Path
+    had_existing_recipe_book_jar: bool
 
 
 def _safe_unlink(path: Path) -> None:
@@ -67,6 +70,7 @@ def _safe_rmtree(path: Path) -> None:
 class MpkInjector:
     DATAPACK_NAME = "zdash_tracker"
     DATAPACK_ENABLED_KEY = f"file/{DATAPACK_NAME}"
+    RECIPE_BOOK_JAR_NAME = "recipe-book.jar"
     FAST_RESET_CANDIDATE_NAMES = (
         "fast_reset.json",
         "fast-reset.json",
@@ -260,6 +264,9 @@ class MpkInjector:
     def apply(self, runtime: MpkRuntimePaths) -> tuple[MpkInjectionToken | None, str | None]:
         if not self.datapack_src.exists():
             return None, f"Datapack source not found: {self.datapack_src}"
+        recipe_book_src = self.project_root / self.RECIPE_BOOK_JAR_NAME
+        if not recipe_book_src.exists() or not recipe_book_src.is_file():
+            return None, f"Recipe book mod not found: {recipe_book_src}"
         atum_jar, jar_error = self._find_project_atum_jar()
         if atum_jar is None:
             return None, jar_error or "Could not resolve Atum jar."
@@ -271,6 +278,8 @@ class MpkInjector:
         atum_json_backup = runtime.atum_json_path.parent / "atum_bak.json"
         legacy_atum_jar_backup = runtime.mods_dir / "atum_bak.jar"
         atum_jar_backup = runtime.mods_dir / "atum_bak.jar.disabled"
+        recipe_book_target = runtime.mods_dir / self.RECIPE_BOOK_JAR_NAME
+        recipe_book_backup = runtime.mods_dir / "recipe-book_bak.jar.disabled"
         datapack_dst = runtime.atum_datapacks_dir / self.DATAPACK_NAME
         datapack_backup = runtime.atum_datapacks_dir / f"{self.DATAPACK_NAME}_bak"
 
@@ -318,6 +327,12 @@ class MpkInjector:
             _safe_unlink(old)
         shutil.copy2(atum_jar, atum_jar_target)
 
+        had_existing_recipe_book_jar = recipe_book_target.exists()
+        _safe_unlink(recipe_book_backup)
+        if had_existing_recipe_book_jar:
+            shutil.copy2(recipe_book_target, recipe_book_backup)
+        shutil.copy2(recipe_book_src, recipe_book_target)
+
         token = MpkInjectionToken(
             runtime=runtime,
             atum_json_backup_path=atum_json_backup,
@@ -331,6 +346,9 @@ class MpkInjector:
             disabled_ranked_mods=[],
             fast_reset_config_path=fast_reset_config_path,
             fast_reset_backup_path=fast_reset_backup_path,
+            recipe_book_target_path=recipe_book_target,
+            recipe_book_backup_path=recipe_book_backup,
+            had_existing_recipe_book_jar=had_existing_recipe_book_jar,
         )
         disabled_ranked_mods, ranked_disable_error = self._disable_mcsr_ranked_mods(runtime.mods_dir)
         if ranked_disable_error is not None:
@@ -373,6 +391,15 @@ class MpkInjector:
             _safe_unlink(token.atum_jar_backup_path)
         except Exception as exc:
             errors.append(f"Atum jar restore failed: {exc}")
+
+        try:
+            if token.had_existing_recipe_book_jar and token.recipe_book_backup_path.exists():
+                shutil.copy2(token.recipe_book_backup_path, token.recipe_book_target_path)
+            else:
+                _safe_unlink(token.recipe_book_target_path)
+            _safe_unlink(token.recipe_book_backup_path)
+        except Exception as exc:
+            errors.append(f"recipe-book.jar restore failed: {exc}")
 
         try:
             if token.datapack_dst_path.exists():
