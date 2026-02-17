@@ -79,7 +79,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Watch latest.log and classify last world on exit.")
     parser.add_argument(
         "--instance",
-        default=r"C:\Users\Boyen\Desktop\MultiMC\instances\ZeroPractice\.minecraft",
+        default=r"C:\Users\Boyen\Desktop\MultiMC\instances\Ranked\.minecraft",
         help="Path to .minecraft for the instance.",
     )
     parser.add_argument(
@@ -142,6 +142,12 @@ def main() -> int:
                                     f"active={metrics.get('run_active', False)}",
                                     f"dragon_died={metrics.get('dragon_died', False)}",
                                     f"died_gt={metrics.get('dragon_died_gt', 0)}",
+                                    f"flyaway={metrics.get('flyaway_detected', False)}",
+                                    f"flyaway_gt={metrics.get('flyaway_detected_gt', 0)}",
+                                    f"flyaway_x={metrics.get('flyaway_dragon_x', 0)}",
+                                    f"flyaway_y={metrics.get('flyaway_dragon_y', 0)}",
+                                    f"flyaway_z={metrics.get('flyaway_dragon_z', 0)}",
+                                    f"flyaway_crystals={metrics.get('flyaway_crystals_alive', -1)}",
                                 ]
                             )
                         )
@@ -163,8 +169,17 @@ def main() -> int:
                             "  Totals: "
                             + " | ".join(
                                 [
-                                    f"beds_exploded={metrics.get('beds_exploded', 0)}",
-                                    f"anchors_exploded_est={metrics.get('anchors_exploded_est', 0)}",
+                                    f"beds_from_damage={metrics.get('beds_exploded', 0)}",
+                                    f"anchors_from_damage={metrics.get('anchors_exploded_est', 0)}",
+                                    (
+                                        "explosives="
+                                        + str(metrics.get("explosives_base_count", 0))
+                                        + (
+                                            f"+{metrics.get('explosives_plus_one_count', 0)}"
+                                            if int(metrics.get("explosives_plus_one_count", 0) or 0) > 0
+                                            else ""
+                                        )
+                                    ),
                                     f"bows_shot={metrics.get('bows_shot', 0)}",
                                     f"crossbows_shot={metrics.get('crossbows_shot', 0)}",
                                 ]

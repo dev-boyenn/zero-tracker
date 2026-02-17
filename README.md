@@ -1,8 +1,8 @@
 # Zero Cycle Dashboard
 
-Local dashboard for Minecraft Meescht map zero-cycle practice.
+Local dashboard for Minecraft zero-cycle tracking (MPK-focused).
 
-It tails `latest.log`, parses runs, and serves a live-updating web UI with tower/side/rotation-focused analytics and practice recommendations.
+It tails the configured instance `latest.log`, parses runs, and serves a live-updating web UI with tower/side/rotation-focused analytics and practice recommendations.
 
 ![Dashboard Screenshot](image.png)
 
@@ -45,11 +45,11 @@ Open `http://127.0.0.1:8000`.
 Primary config file:
 - `config.py` at repo root
 
-You can edit defaults there directly (`DEFAULT_LOG_PATH`, `POLL_SECONDS`, etc.), or override with environment variables.
+You can edit defaults there directly (`POLL_SECONDS`, etc.), or override with environment variables.
+
+MPK instance path is configured in the frontend setup card and stored in the SQLite DB (`setup.mpk_instance_path`), not in `config.py`.
 
 Environment variables:
-- `ZERO_DASH_LOG_PATH`: Minecraft log path  
-  Default: `C:\Users\Boyen\Desktop\MultiMC\instances\Ranked\.minecraft\logs\latest.log`
 - `ZERO_DASH_DB_PATH`: SQLite DB path  
   Default: `data/zero_cycles.db`
 - `ZERO_DASH_POLL_SECONDS`: log polling interval  

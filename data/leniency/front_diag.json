@@ -1,0 +1,2758 @@
+{
+  "side": "Front",
+  "entries": [
+    {
+      "tower_name": "Small Boy",
+      "tower_height": 76,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 48,
+      "leniency": 16.75
+    },
+    {
+      "tower_name": "Small Boy",
+      "tower_height": 76,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 54,
+      "leniency": 13.1
+    },
+    {
+      "tower_name": "Small Boy",
+      "tower_height": 76,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 55,
+      "leniency": 12.0
+    },
+    {
+      "tower_name": "Small Boy",
+      "tower_height": 76,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 56,
+      "leniency": 11.85
+    },
+    {
+      "tower_name": "Small Boy",
+      "tower_height": 76,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 57,
+      "leniency": 10.75
+    },
+    {
+      "tower_name": "Small Boy",
+      "tower_height": 76,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 58,
+      "leniency": 8.7
+    },
+    {
+      "tower_name": "Small Boy",
+      "tower_height": 76,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 59,
+      "leniency": 7.25
+    },
+    {
+      "tower_name": "Small Boy",
+      "tower_height": 76,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 60,
+      "leniency": 5.8
+    },
+    {
+      "tower_name": "Small Boy",
+      "tower_height": 76,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 48,
+      "leniency": 12.0
+    },
+    {
+      "tower_name": "Small Boy",
+      "tower_height": 76,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 54,
+      "leniency": 8.35
+    },
+    {
+      "tower_name": "Small Boy",
+      "tower_height": 76,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 55,
+      "leniency": 7.25
+    },
+    {
+      "tower_name": "Small Boy",
+      "tower_height": 76,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 56,
+      "leniency": 7.1
+    },
+    {
+      "tower_name": "Small Boy",
+      "tower_height": 76,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 57,
+      "leniency": 6.0
+    },
+    {
+      "tower_name": "Small Boy",
+      "tower_height": 76,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 58,
+      "leniency": 3.95
+    },
+    {
+      "tower_name": "Small Boy",
+      "tower_height": 76,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 59,
+      "leniency": 2.5
+    },
+    {
+      "tower_name": "Small Boy",
+      "tower_height": 76,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 60,
+      "leniency": 1.05
+    },
+    {
+      "tower_name": "Small Boy",
+      "tower_height": 76,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 48,
+      "leniency": 5.9
+    },
+    {
+      "tower_name": "Small Boy",
+      "tower_height": 76,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 54,
+      "leniency": 2.25
+    },
+    {
+      "tower_name": "Small Boy",
+      "tower_height": 76,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 55,
+      "leniency": 1.15
+    },
+    {
+      "tower_name": "Small Boy",
+      "tower_height": 76,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 56,
+      "leniency": 1.0
+    },
+    {
+      "tower_name": "Small Boy",
+      "tower_height": 76,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 57,
+      "leniency": -0.1
+    },
+    {
+      "tower_name": "Small Boy",
+      "tower_height": 76,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 58,
+      "leniency": -2.15
+    },
+    {
+      "tower_name": "Small Boy",
+      "tower_height": 76,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 59,
+      "leniency": -3.6
+    },
+    {
+      "tower_name": "Small Boy",
+      "tower_height": 76,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 60,
+      "leniency": -5.05
+    },
+    {
+      "tower_name": "Small Boy",
+      "tower_height": 76,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 48,
+      "leniency": 0.7
+    },
+    {
+      "tower_name": "Small Boy",
+      "tower_height": 76,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 54,
+      "leniency": -2.95
+    },
+    {
+      "tower_name": "Small Boy",
+      "tower_height": 76,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 55,
+      "leniency": -4.05
+    },
+    {
+      "tower_name": "Small Boy",
+      "tower_height": 76,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 56,
+      "leniency": -4.2
+    },
+    {
+      "tower_name": "Small Boy",
+      "tower_height": 76,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 57,
+      "leniency": -5.3
+    },
+    {
+      "tower_name": "Small Boy",
+      "tower_height": 76,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 58,
+      "leniency": -7.35
+    },
+    {
+      "tower_name": "Small Boy",
+      "tower_height": 76,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 59,
+      "leniency": -8.8
+    },
+    {
+      "tower_name": "Small Boy",
+      "tower_height": 76,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 60,
+      "leniency": -10.25
+    },
+    {
+      "tower_name": "Small Cage",
+      "tower_height": 79,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 48,
+      "leniency": 19.55
+    },
+    {
+      "tower_name": "Small Cage",
+      "tower_height": 79,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 54,
+      "leniency": 15.9
+    },
+    {
+      "tower_name": "Small Cage",
+      "tower_height": 79,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 55,
+      "leniency": 14.8
+    },
+    {
+      "tower_name": "Small Cage",
+      "tower_height": 79,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 56,
+      "leniency": 14.65
+    },
+    {
+      "tower_name": "Small Cage",
+      "tower_height": 79,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 57,
+      "leniency": 13.55
+    },
+    {
+      "tower_name": "Small Cage",
+      "tower_height": 79,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 58,
+      "leniency": 11.5
+    },
+    {
+      "tower_name": "Small Cage",
+      "tower_height": 79,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 59,
+      "leniency": 10.05
+    },
+    {
+      "tower_name": "Small Cage",
+      "tower_height": 79,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 60,
+      "leniency": 8.6
+    },
+    {
+      "tower_name": "Small Cage",
+      "tower_height": 79,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 48,
+      "leniency": 14.8
+    },
+    {
+      "tower_name": "Small Cage",
+      "tower_height": 79,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 54,
+      "leniency": 11.15
+    },
+    {
+      "tower_name": "Small Cage",
+      "tower_height": 79,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 55,
+      "leniency": 10.05
+    },
+    {
+      "tower_name": "Small Cage",
+      "tower_height": 79,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 56,
+      "leniency": 9.9
+    },
+    {
+      "tower_name": "Small Cage",
+      "tower_height": 79,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 57,
+      "leniency": 8.8
+    },
+    {
+      "tower_name": "Small Cage",
+      "tower_height": 79,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 58,
+      "leniency": 6.75
+    },
+    {
+      "tower_name": "Small Cage",
+      "tower_height": 79,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 59,
+      "leniency": 5.3
+    },
+    {
+      "tower_name": "Small Cage",
+      "tower_height": 79,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 60,
+      "leniency": 3.85
+    },
+    {
+      "tower_name": "Small Cage",
+      "tower_height": 79,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 48,
+      "leniency": 8.7
+    },
+    {
+      "tower_name": "Small Cage",
+      "tower_height": 79,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 54,
+      "leniency": 5.05
+    },
+    {
+      "tower_name": "Small Cage",
+      "tower_height": 79,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 55,
+      "leniency": 3.95
+    },
+    {
+      "tower_name": "Small Cage",
+      "tower_height": 79,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 56,
+      "leniency": 3.8
+    },
+    {
+      "tower_name": "Small Cage",
+      "tower_height": 79,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 57,
+      "leniency": 2.7
+    },
+    {
+      "tower_name": "Small Cage",
+      "tower_height": 79,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 58,
+      "leniency": 0.65
+    },
+    {
+      "tower_name": "Small Cage",
+      "tower_height": 79,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 59,
+      "leniency": -0.8
+    },
+    {
+      "tower_name": "Small Cage",
+      "tower_height": 79,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 60,
+      "leniency": -2.25
+    },
+    {
+      "tower_name": "Small Cage",
+      "tower_height": 79,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 48,
+      "leniency": 3.5
+    },
+    {
+      "tower_name": "Small Cage",
+      "tower_height": 79,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 54,
+      "leniency": -0.15
+    },
+    {
+      "tower_name": "Small Cage",
+      "tower_height": 79,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 55,
+      "leniency": -1.25
+    },
+    {
+      "tower_name": "Small Cage",
+      "tower_height": 79,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 56,
+      "leniency": -1.4
+    },
+    {
+      "tower_name": "Small Cage",
+      "tower_height": 79,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 57,
+      "leniency": -2.5
+    },
+    {
+      "tower_name": "Small Cage",
+      "tower_height": 79,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 58,
+      "leniency": -4.55
+    },
+    {
+      "tower_name": "Small Cage",
+      "tower_height": 79,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 59,
+      "leniency": -6.0
+    },
+    {
+      "tower_name": "Small Cage",
+      "tower_height": 79,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 60,
+      "leniency": -7.45
+    },
+    {
+      "tower_name": "Tall Cage",
+      "tower_height": 82,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 48,
+      "leniency": 18.75
+    },
+    {
+      "tower_name": "Tall Cage",
+      "tower_height": 82,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 54,
+      "leniency": 15.1
+    },
+    {
+      "tower_name": "Tall Cage",
+      "tower_height": 82,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 55,
+      "leniency": 14.0
+    },
+    {
+      "tower_name": "Tall Cage",
+      "tower_height": 82,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 56,
+      "leniency": 13.85
+    },
+    {
+      "tower_name": "Tall Cage",
+      "tower_height": 82,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 57,
+      "leniency": 12.75
+    },
+    {
+      "tower_name": "Tall Cage",
+      "tower_height": 82,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 58,
+      "leniency": 10.7
+    },
+    {
+      "tower_name": "Tall Cage",
+      "tower_height": 82,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 59,
+      "leniency": 9.25
+    },
+    {
+      "tower_name": "Tall Cage",
+      "tower_height": 82,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 60,
+      "leniency": 7.8
+    },
+    {
+      "tower_name": "Tall Cage",
+      "tower_height": 82,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 48,
+      "leniency": 16.15
+    },
+    {
+      "tower_name": "Tall Cage",
+      "tower_height": 82,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 54,
+      "leniency": 12.5
+    },
+    {
+      "tower_name": "Tall Cage",
+      "tower_height": 82,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 55,
+      "leniency": 11.4
+    },
+    {
+      "tower_name": "Tall Cage",
+      "tower_height": 82,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 56,
+      "leniency": 11.25
+    },
+    {
+      "tower_name": "Tall Cage",
+      "tower_height": 82,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 57,
+      "leniency": 10.15
+    },
+    {
+      "tower_name": "Tall Cage",
+      "tower_height": 82,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 58,
+      "leniency": 8.1
+    },
+    {
+      "tower_name": "Tall Cage",
+      "tower_height": 82,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 59,
+      "leniency": 6.65
+    },
+    {
+      "tower_name": "Tall Cage",
+      "tower_height": 82,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 60,
+      "leniency": 5.2
+    },
+    {
+      "tower_name": "Tall Cage",
+      "tower_height": 82,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 48,
+      "leniency": 10.05
+    },
+    {
+      "tower_name": "Tall Cage",
+      "tower_height": 82,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 54,
+      "leniency": 6.4
+    },
+    {
+      "tower_name": "Tall Cage",
+      "tower_height": 82,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 55,
+      "leniency": 5.3
+    },
+    {
+      "tower_name": "Tall Cage",
+      "tower_height": 82,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 56,
+      "leniency": 5.15
+    },
+    {
+      "tower_name": "Tall Cage",
+      "tower_height": 82,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 57,
+      "leniency": 4.05
+    },
+    {
+      "tower_name": "Tall Cage",
+      "tower_height": 82,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 58,
+      "leniency": 2.0
+    },
+    {
+      "tower_name": "Tall Cage",
+      "tower_height": 82,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 59,
+      "leniency": 0.55
+    },
+    {
+      "tower_name": "Tall Cage",
+      "tower_height": 82,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 60,
+      "leniency": -0.9
+    },
+    {
+      "tower_name": "Tall Cage",
+      "tower_height": 82,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 48,
+      "leniency": 4.85
+    },
+    {
+      "tower_name": "Tall Cage",
+      "tower_height": 82,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 54,
+      "leniency": 1.2
+    },
+    {
+      "tower_name": "Tall Cage",
+      "tower_height": 82,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 55,
+      "leniency": 0.1
+    },
+    {
+      "tower_name": "Tall Cage",
+      "tower_height": 82,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 56,
+      "leniency": -0.05
+    },
+    {
+      "tower_name": "Tall Cage",
+      "tower_height": 82,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 57,
+      "leniency": -1.15
+    },
+    {
+      "tower_name": "Tall Cage",
+      "tower_height": 82,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 58,
+      "leniency": -3.2
+    },
+    {
+      "tower_name": "Tall Cage",
+      "tower_height": 82,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 59,
+      "leniency": -4.65
+    },
+    {
+      "tower_name": "Tall Cage",
+      "tower_height": 82,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 60,
+      "leniency": -6.1
+    },
+    {
+      "tower_name": "M-85",
+      "tower_height": 85,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 48,
+      "leniency": 15.95
+    },
+    {
+      "tower_name": "M-85",
+      "tower_height": 85,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 54,
+      "leniency": 12.3
+    },
+    {
+      "tower_name": "M-85",
+      "tower_height": 85,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 55,
+      "leniency": 11.2
+    },
+    {
+      "tower_name": "M-85",
+      "tower_height": 85,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 56,
+      "leniency": 11.05
+    },
+    {
+      "tower_name": "M-85",
+      "tower_height": 85,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 57,
+      "leniency": 9.95
+    },
+    {
+      "tower_name": "M-85",
+      "tower_height": 85,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 58,
+      "leniency": 7.9
+    },
+    {
+      "tower_name": "M-85",
+      "tower_height": 85,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 59,
+      "leniency": 6.45
+    },
+    {
+      "tower_name": "M-85",
+      "tower_height": 85,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 60,
+      "leniency": 5.0
+    },
+    {
+      "tower_name": "M-85",
+      "tower_height": 85,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 48,
+      "leniency": 9.85
+    },
+    {
+      "tower_name": "M-85",
+      "tower_height": 85,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 54,
+      "leniency": 6.2
+    },
+    {
+      "tower_name": "M-85",
+      "tower_height": 85,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 55,
+      "leniency": 5.1
+    },
+    {
+      "tower_name": "M-85",
+      "tower_height": 85,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 56,
+      "leniency": 4.95
+    },
+    {
+      "tower_name": "M-85",
+      "tower_height": 85,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 57,
+      "leniency": 3.85
+    },
+    {
+      "tower_name": "M-85",
+      "tower_height": 85,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 58,
+      "leniency": 1.8
+    },
+    {
+      "tower_name": "M-85",
+      "tower_height": 85,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 59,
+      "leniency": 0.35
+    },
+    {
+      "tower_name": "M-85",
+      "tower_height": 85,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 60,
+      "leniency": -1.1
+    },
+    {
+      "tower_name": "M-85",
+      "tower_height": 85,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 48,
+      "leniency": 4.65
+    },
+    {
+      "tower_name": "M-85",
+      "tower_height": 85,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 54,
+      "leniency": 1.0
+    },
+    {
+      "tower_name": "M-85",
+      "tower_height": 85,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 55,
+      "leniency": -0.1
+    },
+    {
+      "tower_name": "M-85",
+      "tower_height": 85,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 56,
+      "leniency": -0.25
+    },
+    {
+      "tower_name": "M-85",
+      "tower_height": 85,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 57,
+      "leniency": -1.35
+    },
+    {
+      "tower_name": "M-85",
+      "tower_height": 85,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 58,
+      "leniency": -3.4
+    },
+    {
+      "tower_name": "M-85",
+      "tower_height": 85,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 59,
+      "leniency": -4.85
+    },
+    {
+      "tower_name": "M-85",
+      "tower_height": 85,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 60,
+      "leniency": -6.3
+    },
+    {
+      "tower_name": "M-88",
+      "tower_height": 88,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 48,
+      "leniency": 15.3
+    },
+    {
+      "tower_name": "M-88",
+      "tower_height": 88,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 54,
+      "leniency": 11.65
+    },
+    {
+      "tower_name": "M-88",
+      "tower_height": 88,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 55,
+      "leniency": 10.55
+    },
+    {
+      "tower_name": "M-88",
+      "tower_height": 88,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 56,
+      "leniency": 10.4
+    },
+    {
+      "tower_name": "M-88",
+      "tower_height": 88,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 57,
+      "leniency": 9.3
+    },
+    {
+      "tower_name": "M-88",
+      "tower_height": 88,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 58,
+      "leniency": 7.25
+    },
+    {
+      "tower_name": "M-88",
+      "tower_height": 88,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 59,
+      "leniency": 5.8
+    },
+    {
+      "tower_name": "M-88",
+      "tower_height": 88,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 60,
+      "leniency": 4.35
+    },
+    {
+      "tower_name": "M-88",
+      "tower_height": 88,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 48,
+      "leniency": 11.05
+    },
+    {
+      "tower_name": "M-88",
+      "tower_height": 88,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 54,
+      "leniency": 7.4
+    },
+    {
+      "tower_name": "M-88",
+      "tower_height": 88,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 55,
+      "leniency": 6.3
+    },
+    {
+      "tower_name": "M-88",
+      "tower_height": 88,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 56,
+      "leniency": 6.15
+    },
+    {
+      "tower_name": "M-88",
+      "tower_height": 88,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 57,
+      "leniency": 5.05
+    },
+    {
+      "tower_name": "M-88",
+      "tower_height": 88,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 58,
+      "leniency": 3.0
+    },
+    {
+      "tower_name": "M-88",
+      "tower_height": 88,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 59,
+      "leniency": 1.55
+    },
+    {
+      "tower_name": "M-88",
+      "tower_height": 88,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 60,
+      "leniency": 0.1
+    },
+    {
+      "tower_name": "M-88",
+      "tower_height": 88,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 48,
+      "leniency": 5.85
+    },
+    {
+      "tower_name": "M-88",
+      "tower_height": 88,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 54,
+      "leniency": 2.2
+    },
+    {
+      "tower_name": "M-88",
+      "tower_height": 88,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 55,
+      "leniency": 1.1
+    },
+    {
+      "tower_name": "M-88",
+      "tower_height": 88,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 56,
+      "leniency": 0.95
+    },
+    {
+      "tower_name": "M-88",
+      "tower_height": 88,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 57,
+      "leniency": -0.15
+    },
+    {
+      "tower_name": "M-88",
+      "tower_height": 88,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 58,
+      "leniency": -2.2
+    },
+    {
+      "tower_name": "M-88",
+      "tower_height": 88,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 59,
+      "leniency": -3.65
+    },
+    {
+      "tower_name": "M-88",
+      "tower_height": 88,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 60,
+      "leniency": -5.1
+    },
+    {
+      "tower_name": "M-88",
+      "tower_height": 88,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 48,
+      "leniency": 0.4
+    },
+    {
+      "tower_name": "M-88",
+      "tower_height": 88,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 54,
+      "leniency": -3.25
+    },
+    {
+      "tower_name": "M-88",
+      "tower_height": 88,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 55,
+      "leniency": -4.35
+    },
+    {
+      "tower_name": "M-88",
+      "tower_height": 88,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 56,
+      "leniency": -4.5
+    },
+    {
+      "tower_name": "M-88",
+      "tower_height": 88,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 57,
+      "leniency": -5.6
+    },
+    {
+      "tower_name": "M-88",
+      "tower_height": 88,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 58,
+      "leniency": -7.65
+    },
+    {
+      "tower_name": "M-88",
+      "tower_height": 88,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 59,
+      "leniency": -9.1
+    },
+    {
+      "tower_name": "M-88",
+      "tower_height": 88,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 60,
+      "leniency": -10.55
+    },
+    {
+      "tower_name": "M-91",
+      "tower_height": 91,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 48,
+      "leniency": 14.05
+    },
+    {
+      "tower_name": "M-91",
+      "tower_height": 91,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 54,
+      "leniency": 10.4
+    },
+    {
+      "tower_name": "M-91",
+      "tower_height": 91,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 55,
+      "leniency": 9.3
+    },
+    {
+      "tower_name": "M-91",
+      "tower_height": 91,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 56,
+      "leniency": 9.15
+    },
+    {
+      "tower_name": "M-91",
+      "tower_height": 91,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 57,
+      "leniency": 8.05
+    },
+    {
+      "tower_name": "M-91",
+      "tower_height": 91,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 58,
+      "leniency": 6.0
+    },
+    {
+      "tower_name": "M-91",
+      "tower_height": 91,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 59,
+      "leniency": 4.55
+    },
+    {
+      "tower_name": "M-91",
+      "tower_height": 91,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 60,
+      "leniency": 3.1
+    },
+    {
+      "tower_name": "M-91",
+      "tower_height": 91,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 48,
+      "leniency": 12.05
+    },
+    {
+      "tower_name": "M-91",
+      "tower_height": 91,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 54,
+      "leniency": 8.4
+    },
+    {
+      "tower_name": "M-91",
+      "tower_height": 91,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 55,
+      "leniency": 7.3
+    },
+    {
+      "tower_name": "M-91",
+      "tower_height": 91,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 56,
+      "leniency": 7.15
+    },
+    {
+      "tower_name": "M-91",
+      "tower_height": 91,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 57,
+      "leniency": 6.05
+    },
+    {
+      "tower_name": "M-91",
+      "tower_height": 91,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 58,
+      "leniency": 4.0
+    },
+    {
+      "tower_name": "M-91",
+      "tower_height": 91,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 59,
+      "leniency": 2.55
+    },
+    {
+      "tower_name": "M-91",
+      "tower_height": 91,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 60,
+      "leniency": 1.1
+    },
+    {
+      "tower_name": "M-91",
+      "tower_height": 91,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 48,
+      "leniency": 6.95
+    },
+    {
+      "tower_name": "M-91",
+      "tower_height": 91,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 54,
+      "leniency": 3.3
+    },
+    {
+      "tower_name": "M-91",
+      "tower_height": 91,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 55,
+      "leniency": 2.2
+    },
+    {
+      "tower_name": "M-91",
+      "tower_height": 91,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 56,
+      "leniency": 2.05
+    },
+    {
+      "tower_name": "M-91",
+      "tower_height": 91,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 57,
+      "leniency": 0.95
+    },
+    {
+      "tower_name": "M-91",
+      "tower_height": 91,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 58,
+      "leniency": -1.1
+    },
+    {
+      "tower_name": "M-91",
+      "tower_height": 91,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 59,
+      "leniency": -2.55
+    },
+    {
+      "tower_name": "M-91",
+      "tower_height": 91,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 60,
+      "leniency": -4.0
+    },
+    {
+      "tower_name": "M-91",
+      "tower_height": 91,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 48,
+      "leniency": 1.5
+    },
+    {
+      "tower_name": "M-91",
+      "tower_height": 91,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 54,
+      "leniency": -2.15
+    },
+    {
+      "tower_name": "M-91",
+      "tower_height": 91,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 55,
+      "leniency": -3.25
+    },
+    {
+      "tower_name": "M-91",
+      "tower_height": 91,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 56,
+      "leniency": -3.4
+    },
+    {
+      "tower_name": "M-91",
+      "tower_height": 91,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 57,
+      "leniency": -4.5
+    },
+    {
+      "tower_name": "M-91",
+      "tower_height": 91,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 58,
+      "leniency": -6.55
+    },
+    {
+      "tower_name": "M-91",
+      "tower_height": 91,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 59,
+      "leniency": -8.0
+    },
+    {
+      "tower_name": "M-91",
+      "tower_height": 91,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 60,
+      "leniency": -9.45
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 48,
+      "leniency": 17.75
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 54,
+      "leniency": 14.1
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 55,
+      "leniency": 13.0
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 56,
+      "leniency": 12.85
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 57,
+      "leniency": 11.75
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 58,
+      "leniency": 9.7
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 59,
+      "leniency": 8.25
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 60,
+      "leniency": 6.8
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 48,
+      "leniency": 14.75
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 54,
+      "leniency": 11.1
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 55,
+      "leniency": 10.0
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 56,
+      "leniency": 9.85
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 57,
+      "leniency": 8.75
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 58,
+      "leniency": 6.7
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 59,
+      "leniency": 5.25
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 60,
+      "leniency": 3.8
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 48,
+      "leniency": 11.1
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 54,
+      "leniency": 7.45
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 55,
+      "leniency": 6.35
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 56,
+      "leniency": 6.2
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 57,
+      "leniency": 5.1
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 58,
+      "leniency": 3.05
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 59,
+      "leniency": 1.6
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 60,
+      "leniency": 0.15
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 48,
+      "leniency": 8.2
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 54,
+      "leniency": 4.55
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 55,
+      "leniency": 3.45
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 56,
+      "leniency": 3.3
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 57,
+      "leniency": 2.2
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 58,
+      "leniency": 0.15
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 59,
+      "leniency": -1.3
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 60,
+      "leniency": -2.75
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 48,
+      "leniency": 2.3
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 54,
+      "leniency": -1.35
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 55,
+      "leniency": -2.45
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 56,
+      "leniency": -2.6
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 57,
+      "leniency": -3.7
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 58,
+      "leniency": -5.75
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 59,
+      "leniency": -7.2
+    },
+    {
+      "tower_name": "T-94",
+      "tower_height": 94,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 60,
+      "leniency": -8.65
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 48,
+      "leniency": 18.3
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 54,
+      "leniency": 14.65
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 55,
+      "leniency": 13.55
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 56,
+      "leniency": 13.4
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 57,
+      "leniency": 12.3
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 58,
+      "leniency": 10.25
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 59,
+      "leniency": 8.8
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 60,
+      "leniency": 7.35
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 48,
+      "leniency": 14.75
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 54,
+      "leniency": 11.1
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 55,
+      "leniency": 10.0
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 56,
+      "leniency": 9.85
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 57,
+      "leniency": 8.75
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 58,
+      "leniency": 6.7
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 59,
+      "leniency": 5.25
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 60,
+      "leniency": 3.8
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 48,
+      "leniency": 10.85
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 54,
+      "leniency": 7.2
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 55,
+      "leniency": 6.1
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 56,
+      "leniency": 5.95
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 57,
+      "leniency": 4.85
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 58,
+      "leniency": 2.8
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 59,
+      "leniency": 1.35
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 60,
+      "leniency": -0.1
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 48,
+      "leniency": 8.0
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 54,
+      "leniency": 4.35
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 55,
+      "leniency": 3.25
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 56,
+      "leniency": 3.1
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 57,
+      "leniency": 2.0
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 58,
+      "leniency": -0.05
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 59,
+      "leniency": -1.5
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 60,
+      "leniency": -2.95
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 48,
+      "leniency": 3.85
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 54,
+      "leniency": 0.2
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 55,
+      "leniency": -0.9
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 56,
+      "leniency": -1.05
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 57,
+      "leniency": -2.15
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 58,
+      "leniency": -4.2
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 59,
+      "leniency": -5.65
+    },
+    {
+      "tower_name": "T-97",
+      "tower_height": 97,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 60,
+      "leniency": -7.1
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 48,
+      "leniency": 18.3
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 54,
+      "leniency": 14.65
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 55,
+      "leniency": 13.55
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 56,
+      "leniency": 13.4
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 57,
+      "leniency": 12.3
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 58,
+      "leniency": 10.25
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 59,
+      "leniency": 8.8
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 60,
+      "leniency": 7.35
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 48,
+      "leniency": 15.3
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 54,
+      "leniency": 11.65
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 55,
+      "leniency": 10.55
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 56,
+      "leniency": 10.4
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 57,
+      "leniency": 9.3
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 58,
+      "leniency": 7.25
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 59,
+      "leniency": 5.8
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 60,
+      "leniency": 4.35
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 48,
+      "leniency": 10.85
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 54,
+      "leniency": 7.2
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 55,
+      "leniency": 6.1
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 56,
+      "leniency": 5.95
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 57,
+      "leniency": 4.85
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 58,
+      "leniency": 2.8
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 59,
+      "leniency": 1.35
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 95,
+      "o_level": 60,
+      "leniency": -0.1
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 48,
+      "leniency": 6.45
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 54,
+      "leniency": 2.8
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 55,
+      "leniency": 1.7
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 56,
+      "leniency": 1.55
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 57,
+      "leniency": 0.45
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 58,
+      "leniency": -1.6
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 59,
+      "leniency": -3.05
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 60,
+      "leniency": -4.5
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 48,
+      "leniency": 4.95
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 54,
+      "leniency": 1.3
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 55,
+      "leniency": 0.2
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 56,
+      "leniency": 0.05
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 57,
+      "leniency": -1.05
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 58,
+      "leniency": -3.1
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 59,
+      "leniency": -4.55
+    },
+    {
+      "tower_name": "T-100",
+      "tower_height": 100,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 60,
+      "leniency": -6.0
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 48,
+      "leniency": 19.1
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 54,
+      "leniency": 15.45
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 55,
+      "leniency": 14.35
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 56,
+      "leniency": 14.2
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 57,
+      "leniency": 13.1
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 58,
+      "leniency": 11.05
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 59,
+      "leniency": 9.6
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 86,
+      "o_level": 60,
+      "leniency": 8.15
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 48,
+      "leniency": 16.1
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 54,
+      "leniency": 12.45
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 55,
+      "leniency": 11.35
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 56,
+      "leniency": 11.2
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 57,
+      "leniency": 10.1
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 58,
+      "leniency": 8.05
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 59,
+      "leniency": 6.6
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 90,
+      "o_level": 60,
+      "leniency": 5.15
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 94,
+      "o_level": 48,
+      "leniency": 12.2
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 94,
+      "o_level": 54,
+      "leniency": 8.55
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 94,
+      "o_level": 55,
+      "leniency": 7.45
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 94,
+      "o_level": 56,
+      "leniency": 7.3
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 94,
+      "o_level": 57,
+      "leniency": 6.2
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 94,
+      "o_level": 58,
+      "leniency": 4.15
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 94,
+      "o_level": 59,
+      "leniency": 2.7
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 94,
+      "o_level": 60,
+      "leniency": 1.25
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 48,
+      "leniency": 8.6
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 54,
+      "leniency": 4.95
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 55,
+      "leniency": 3.85
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 56,
+      "leniency": 3.7
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 57,
+      "leniency": 2.6
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 58,
+      "leniency": 0.55
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 59,
+      "leniency": -0.9
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 99,
+      "o_level": 60,
+      "leniency": -2.35
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 48,
+      "leniency": 4.2
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 54,
+      "leniency": 0.55
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 55,
+      "leniency": -0.55
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 56,
+      "leniency": -0.7
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 57,
+      "leniency": -1.8
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 58,
+      "leniency": -3.85
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 59,
+      "leniency": -5.3
+    },
+    {
+      "tower_name": "Tall Boy",
+      "tower_height": 103,
+      "side": "Front",
+      "standing_height": 104,
+      "o_level": 60,
+      "leniency": -6.75
+    }
+  ],
+  "source": "C:\\Users\\Boyen\\Documents\\mcsr\\zero_cycle_dashboard\\front_diag.tsv"
+}

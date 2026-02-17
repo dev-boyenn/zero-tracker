@@ -24,12 +24,8 @@
           <p id="lastUpdated">Waiting for data...</p>
         </div>
         <div class="health">
-          <label for="sourceFilter">Data</label>
-          <select id="sourceFilter">
-            <option value="all">All Data</option>
-            <option value="practice">Practice Map</option>
-            <option value="mpk">MPK Seeds</option>
-          </select>
+          <label for="leniencyTarget">Leniency &gt;</label>
+          <input id="leniencyTarget" type="number" step="0.1" value="0" />
           <label for="includeOneEight">Include 1/8</label>
           <input id="includeOneEight" type="checkbox" />
           <label for="windowFilter">Window</label>
@@ -60,15 +56,49 @@
         </div>
       </section>
 
+      <section id="mpkSetupCard" class="card setup-card hidden">
+        <h3>MPK Setup Required</h3>
+        <p id="mpkSetupMessage"></p>
+        <form id="mpkSetupForm" class="setup-form">
+          <input
+            id="mpkInstancePathInput"
+            type="text"
+            autocomplete="off"
+            placeholder="C:\Users\You\Desktop\MultiMC\instances\ZeroPractice or ...\.minecraft"
+          />
+          <button id="mpkSetupSaveBtn" type="submit">Save & Inject</button>
+          <button id="mpkClearBtn" type="button">Uninject + Clear Path</button>
+        </form>
+        <p id="mpkSetupStatus"></p>
+      </section>
+
       <section class="card practice-card">
         <h3>What To Practice Next</h3>
-        <p id="practiceNextMain">No recommendation yet.</p>
+        <div class="practice-target-grid">
+          <article class="practice-target-panel">
+            <h4 id="practiceCurrentHeading">Current</h4>
+            <div id="practiceCurrentLeniency" class="practice-leniency-corner"></div>
+            <p id="practiceCurrentMain"></p>
+            <p id="practiceCurrentStats"></p>
+            <p id="practiceCurrentReason"></p>
+          </article>
+          <article class="practice-target-panel">
+            <h4 id="practiceNextHeading">Next</h4>
+            <div id="practiceNextLeniency" class="practice-leniency-corner"></div>
+            <p id="practiceNextMain">No recommendation yet.</p>
+            <p id="practiceNextStats"></p>
+            <p id="practiceNextReason"></p>
+          </article>
+        </div>
         <p id="practiceNextMeta"></p>
         <div class="practice-progress-wrap">
           <div class="practice-progress-track">
             <div id="practiceDataProgressBar" class="practice-progress-fill"></div>
           </div>
           <p id="practiceDataProgressText"></p>
+        </div>
+        <div class="practice-lock-row">
+          <button id="clearMpkLocksBtn" type="button">Clear Lock List</button>
         </div>
         <div class="practice-command-row">
           <p id="practiceNextCommand"></p>
@@ -77,6 +107,47 @@
         </div>
         <p id="practiceMissingTowers"></p>
         <p id="practiceMissing18"></p>
+      </section>
+
+      <section class="table-grid single">
+        <article class="card table-card">
+          <h3 id="attemptTableTitle">Recent Attempts</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Timestamp</th>
+                  <th>Source</th>
+                  <th>Status</th>
+                  <th>Tower</th>
+                  <th>Side</th>
+                  <th>1/8</th>
+                  <th>O Level</th>
+                  <th>Standing Y</th>
+                  <th>Bow Shots</th>
+                  <th>Total Dmg</th>
+                  <th>Explosives</th>
+                  <th>Run Time</th>
+                </tr>
+              </thead>
+              <tbody id="attemptTable"></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <section class="heatmap-section">
+        <article class="card heatmap-card">
+          <h3>Tower x O-Level Consistency Heatmap</h3>
+          <div id="oLevelHeatmap" class="o-heatmap"></div>
+          <div class="o-heatmap-legend">
+            <span class="o-leg-item"><i class="o-leg-box o-leg-red"></i>Lower consistency</span>
+            <span class="o-leg-item"><i class="o-leg-box o-leg-green"></i>Higher consistency</span>
+            <span class="o-leg-item"><i class="o-leg-box o-leg-gray"></i>No attempts</span>
+          </div>
+          <p class="o-heatmap-credit">Leniency raw data credit: @ClearColdWater</p>
+        </article>
       </section>
 
       <section class="kpi-grid">
@@ -149,6 +220,29 @@
         </article>
       </section>
 
+      <section class="table-grid single">
+        <article class="card table-card">
+          <h3 id="towerTableTitle">Tower Performance</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Tower</th>
+                  <th>Side</th>
+                  <th>Attempts</th>
+                  <th>Success %</th>
+                  <th>Avg Time</th>
+                  <th>Avg Rot</th>
+                  <th>Avg Expl</th>
+                  <th>Avg Major Dmg/Hit</th>
+                </tr>
+              </thead>
+              <tbody id="towerTable"></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
       <section class="chart-grid">
         <article class="card chart-card">
           <h3>Session Consistency Progression</h3>
@@ -202,18 +296,6 @@
         </article>
       </section>
 
-      <section class="heatmap-section">
-        <article class="card heatmap-card">
-          <h3>Tower x O-Level Consistency Heatmap</h3>
-          <div id="oLevelHeatmap" class="o-heatmap"></div>
-          <div class="o-heatmap-legend">
-            <span class="o-leg-item"><i class="o-leg-box o-leg-red"></i>Lower consistency</span>
-            <span class="o-leg-item"><i class="o-leg-box o-leg-green"></i>Higher consistency</span>
-            <span class="o-leg-item"><i class="o-leg-box o-leg-gray"></i>No attempts</span>
-          </div>
-        </article>
-      </section>
-
       <section class="chart-grid secondary two-col">
         <article class="card chart-card">
           <h3>Tower Spider (Back)</h3>
@@ -222,53 +304,6 @@
         <article class="card chart-card">
           <h3>Tower Spider (Front)</h3>
           <canvas id="towerFrontRadarChart"></canvas>
-        </article>
-      </section>
-
-      <section class="table-grid">
-        <article class="card table-card">
-          <h3 id="towerTableTitle">Tower Performance</h3>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Tower</th>
-                  <th>Side</th>
-                  <th>Attempts</th>
-                  <th>Success %</th>
-                  <th>Avg Time</th>
-                  <th>Avg Rot</th>
-                  <th>Avg Expl</th>
-                  <th>Avg Major Dmg/Hit</th>
-                </tr>
-              </thead>
-              <tbody id="towerTable"></tbody>
-            </table>
-          </div>
-        </article>
-
-        <article class="card table-card">
-          <h3 id="attemptTableTitle">Recent Attempts</h3>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Timestamp</th>
-                  <th>Source</th>
-                  <th>Status</th>
-                  <th>Tower</th>
-                  <th>Side</th>
-                  <th>Damage Events</th>
-                  <th>Total Dmg</th>
-                  <th>Major Hits</th>
-                  <th>Explosives</th>
-                  <th>Run Time</th>
-                </tr>
-              </thead>
-              <tbody id="attemptTable"></tbody>
-            </table>
-          </div>
         </article>
       </section>
     </main>

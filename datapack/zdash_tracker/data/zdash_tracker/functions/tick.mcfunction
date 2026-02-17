@@ -18,6 +18,9 @@ execute if entity @e[type=minecraft:ender_dragon,limit=1] store result score #dr
 execute if score #dragon_hp zdi matches ..0 if score #dragon_died zdi matches 0 run function zdash_tracker:mark_dragon_died
 execute if entity @e[type=minecraft:ender_dragon,nbt={DragonPhase:9},limit=1] if score #dragon_died zdi matches 0 run function zdash_tracker:mark_dragon_died
 
+# Detect flyaway only while dragon is alive and loaded.
+execute if score #active zdi matches 1 if score #dragon_died zdi matches 0 if entity @e[type=minecraft:ender_dragon,limit=1] run function zdash_tracker:flyaway_update
+
 # Track dragon absence to avoid ending too early before stats settle.
 execute if score #active zdi matches 1 if entity @e[type=minecraft:ender_dragon,limit=1] run scoreboard players set #missing zdi 0
 execute if score #active zdi matches 1 unless entity @e[type=minecraft:ender_dragon,limit=1] run scoreboard players add #missing zdi 1

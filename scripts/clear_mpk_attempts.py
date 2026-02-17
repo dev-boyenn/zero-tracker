@@ -21,6 +21,14 @@ def main() -> int:
 
         db.execute("DELETE FROM attempts WHERE COALESCE(attempt_source, 'practice') = 'mpk'")
         db.execute("DELETE FROM ingest_state WHERE key = 'mpk.last_ingested_world'")
+        db.execute("DELETE FROM ingest_state WHERE key LIKE 'mpk.seed_rotate.%'")
+        db.execute(
+            """
+            DELETE FROM ingest_state
+            WHERE key LIKE 'mpk.practice.%'
+              AND key <> 'mpk.practice.leniency_target'
+            """
+        )
 
         after_row = db.query_one(
             "SELECT COUNT(*) AS n FROM attempts WHERE COALESCE(attempt_source, 'practice') = 'mpk'"
@@ -31,7 +39,7 @@ def main() -> int:
         print(f"DB: {DB_PATH}")
         print(f"Deleted MPK attempts: {deleted}")
         print(f"Remaining MPK attempts: {after}")
-        print("Reset state key: mpk.last_ingested_world")
+        print("Reset state keys: mpk.last_ingested_world, mpk.seed_rotate.*, mpk.practice.* (except leniency_target)")
         return 0
     finally:
         db.close()

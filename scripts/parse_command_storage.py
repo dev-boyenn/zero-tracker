@@ -277,6 +277,75 @@ def _attribute_damage_from_events(
     return bed_scaled, anchor_scaled, other_scaled, mapped
 
 
+def _classify_damage_event_explosive_type(ev: dict[str, Any]) -> str:
+    source = str(ev.get("source", "other"))
+    bed_dmg = int(ev.get("bed_dmg_scaled", 0) or 0)
+    anchor_dmg = int(ev.get("anchor_dmg_scaled", 0) or 0)
+    if source in {"bed", "mixed_bed_other"}:
+        return "bed"
+    if source in {"anchor", "mixed_anchor_other"}:
+        return "anchor"
+    if source in {"mixed_explosive", "mixed"}:
+        if bed_dmg > 0 and anchor_dmg > 0:
+            return "bed" if bed_dmg >= anchor_dmg else "anchor"
+        if bed_dmg > 0:
+            return "bed"
+        if anchor_dmg > 0:
+            return "anchor"
+    if source == "other":
+        if bed_dmg > 0 and anchor_dmg <= 0:
+            return "bed"
+        if anchor_dmg > 0 and bed_dmg <= 0:
+            return "anchor"
+    return "other"
+
+
+def _derive_explosive_usage_from_damage(
+    mapped_damage_events: list[dict[str, Any]],
+    *,
+    plus_window_ticks: int = 10,
+) -> dict[str, int]:
+    typed_events: list[tuple[int, str]] = []
+    bed_count = 0
+    anchor_count = 0
+    for ev in mapped_damage_events:
+        damage = int(ev.get("hp_diff_scaled", 0) or 0)
+        if damage <= 0:
+            continue
+        kind = _classify_damage_event_explosive_type(ev)
+        if kind not in {"bed", "anchor"}:
+            continue
+        gt = int(ev.get("gt", 0) or 0)
+        typed_events.append((gt, kind))
+        if kind == "bed":
+            bed_count += 1
+        else:
+            anchor_count += 1
+    if not typed_events:
+        return {
+            "beds_from_damage": 0,
+            "anchors_from_damage": 0,
+            "explosive_events_from_damage": 0,
+            "explosives_base_count": 0,
+            "explosives_plus_one_count": 0,
+        }
+    typed_events.sort(key=lambda x: x[0])
+    clusters = 1
+    prev_gt = typed_events[0][0]
+    for gt, _ in typed_events[1:]:
+        if (gt - prev_gt) > plus_window_ticks:
+            clusters += 1
+        prev_gt = gt
+    total_events = len(typed_events)
+    return {
+        "beds_from_damage": bed_count,
+        "anchors_from_damage": anchor_count,
+        "explosive_events_from_damage": total_events,
+        "explosives_base_count": clusters,
+        "explosives_plus_one_count": max(0, total_events - clusters),
+    }
+
+
 def run_metrics_from_storage(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
@@ -294,6 +363,7 @@ def run_metrics_from_storage(path: Path) -> dict[str, Any]:
     meta = tracker.get("meta") if isinstance(tracker.get("meta"), dict) else {}
     version = meta.get("version")
     deltas = run.get("deltas") if isinstance(run.get("deltas"), dict) else {}
+    flyaway = run.get("flyaway") if isinstance(run.get("flyaway"), dict) else {}
     end_entry = run.get("end_entry") if isinstance(run.get("end_entry"), dict) else {}
     explosive_stand = run.get("explosive_stand") if isinstance(run.get("explosive_stand"), dict) else {}
     explode_events = _parse_explode_events(run.get("explode_events"))
@@ -365,6 +435,11 @@ def run_metrics_from_storage(path: Path) -> dict[str, Any]:
             )
             ev["other_dmg_scaled"] = int(round(float(int(ev.get("other_dmg_scaled", 0))) / float(damage_scale)))
 
+    explosive_usage = _derive_explosive_usage_from_damage(
+        mapped_damage_events,
+        plus_window_ticks=10,
+    )
+
     entry_player_y = int(end_entry.get("player_y", 0) or 0)
     entry_top_y = int(end_entry.get("top_y", -1) or -1)
     entry_top_is_endstone = bool(end_entry.get("top_is_endstone", 0))
@@ -381,6 +456,16 @@ def run_metrics_from_storage(path: Path) -> dict[str, Any]:
         "last_sample_gt": last_sample_gt,
         "dragon_died": bool(run.get("dragon_died", 0)),
         "dragon_died_gt": int(run.get("dragon_died_gt", 0) or 0),
+        "flyaway_detected": bool(flyaway.get("detected", 0)),
+        "flyaway_armed": bool(flyaway.get("armed", 0)),
+        "flyaway_detected_gt": int(flyaway.get("detected_gt", 0) or 0),
+        "flyaway_node": str(flyaway.get("node", "") or ""),
+        "flyaway_node_code": int(flyaway.get("node_code", 0) or 0),
+        "flyaway_dragon_x": int(flyaway.get("dragon_x", 0) or 0),
+        "flyaway_dragon_y": int(flyaway.get("dragon_y", 0) or 0),
+        "flyaway_dragon_z": int(flyaway.get("dragon_z", 0) or 0),
+        "flyaway_detected_dist2": int(flyaway.get("detected_dist2", 0) or 0),
+        "flyaway_crystals_alive": int(flyaway.get("crystals_alive", -1) or -1),
         "end_entry_logged": bool(end_entry.get("logged", 0)),
         "end_entry_gt": int(end_entry.get("gt", 0) or 0),
         "end_entry_player_y": entry_player_y,
@@ -389,9 +474,15 @@ def run_metrics_from_storage(path: Path) -> dict[str, Any]:
         "end_entry_caged_endstone": entry_caged_endstone,
         "explosive_standing_logged": explosive_standing_logged,
         "explosive_standing_y": explosive_standing_y,
-        "beds_exploded": int(deltas.get("beds_exploded", 0) or 0),
+        "beds_exploded_raw": int(deltas.get("beds_exploded", 0) or 0),
         "anchors_interactions": int(deltas.get("anchors_interactions", 0) or 0),
-        "anchors_exploded_est": sum(int(ev.get("explode_anchors", 0) or 0) for ev in explode_events),
+        "anchors_exploded_est_raw": sum(int(ev.get("explode_anchors", 0) or 0) for ev in explode_events),
+        # Canonical explosive counts come from mapped damage events.
+        "beds_exploded": int(explosive_usage["beds_from_damage"]),
+        "anchors_exploded_est": int(explosive_usage["anchors_from_damage"]),
+        "explosive_events_from_damage": int(explosive_usage["explosive_events_from_damage"]),
+        "explosives_base_count": int(explosive_usage["explosives_base_count"]),
+        "explosives_plus_one_count": int(explosive_usage["explosives_plus_one_count"]),
         "bows_shot": int(deltas.get("bows_shot", 0) or 0),
         "crossbows_shot": int(deltas.get("crossbows_shot", 0) or 0),
         "bed_damage_est": round(float(bed_damage_scaled), 2),

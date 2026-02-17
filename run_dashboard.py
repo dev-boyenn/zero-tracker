@@ -61,6 +61,9 @@ def main() -> int:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--no-browser", action="store_true", default=True)
+    parser.add_argument("--reload", dest="reload", action="store_true")
+    parser.add_argument("--no-reload", dest="reload", action="store_false")
+    parser.set_defaults(reload=True)
     args = parser.parse_args()
 
     root = Path(__file__).resolve().parent
@@ -79,6 +82,8 @@ def main() -> int:
         "--timeout-graceful-shutdown",
         "0",
     ]
+    if args.reload:
+        uvicorn_cmd.extend(["--reload", "--reload-dir", "app", "--reload-dir", "scripts"])
 
     uvicorn_proc = subprocess.Popen(uvicorn_cmd, cwd=root)
     browser_proc: subprocess.Popen[bytes] | None = None

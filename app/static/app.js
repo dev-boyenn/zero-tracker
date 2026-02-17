@@ -12,15 +12,20 @@ let towerFrontRadarChart;
 let selectedTower = "__GLOBAL__";
 let selectedSide = "__GLOBAL__";
 let selectedWindow = "all";
-let includeOneEight = false;
+let includeOneEight = true;
 let selectedRotation = "both";
-let selectedSource = "mpk";
+const selectedSource = "mpk";
+let selectedLeniencyTarget = null;
 let rollingMode = "r50";
 let lastPayload = null;
+let lastHealth = null;
+let leniencyRefreshTimer = null;
 const expandedTowerRows = new Set();
 let currentPracticeCommand = "";
 let lastPracticeTargetKey = "";
 let practiceAudioCtx = null;
+let lockedMpkTargets = new Set();
+let lockRequestInFlight = false;
 
 function formatPct(value) {
   return `${Number(value || 0).toFixed(2)}%`;
@@ -64,6 +69,7 @@ function renderOLevelHeatmap(matrix) {
   }
   const table = document.createElement("table");
   table.className = "o-heatmap-table";
+  const mpkInteractive = selectedSource === "mpk";
 
   const thead = document.createElement("thead");
   const headRow = document.createElement("tr");
@@ -75,7 +81,7 @@ function renderOLevelHeatmap(matrix) {
     const level = Number(levelRaw);
     const th = document.createElement("th");
     th.className = "o-level-head";
-    th.textContent = `O ${level}`;
+    th.textContent = level === 48 ? "Open (O48)" : `O ${level}`;
     headRow.appendChild(th);
   }
   thead.appendChild(headRow);
@@ -98,6 +104,15 @@ function renderOLevelHeatmap(matrix) {
       const successRateRaw = cell.success_rate;
       const hasData = attempts > 0 && successRateRaw !== null && successRateRaw !== undefined;
       const successRate = hasData ? Number(successRateRaw) : 0;
+      const leniencyRaw = cell.leniency;
+      const hasLeniency = leniencyRaw !== null && leniencyRaw !== undefined;
+      const leniency = hasLeniency ? Number(leniencyRaw) : null;
+      const targetKey = cell.target_key ? String(cell.target_key) : "";
+      const isLocked = !!targetKey && (lockedMpkTargets.has(targetKey) || !!cell.is_locked);
+      const leniencyText = hasLeniency ? `L ${leniency.toFixed(2)}` : "L -";
+      const leniencyBlocked =
+        selectedSource === "mpk" &&
+        (!hasLeniency || leniency <= Number(selectedLeniencyTarget ?? 0));
       const standingRows = Array.isArray(cell.standing_height_breakdown)
         ? cell.standing_height_breakdown
         : [];
@@ -143,18 +158,35 @@ function renderOLevelHeatmap(matrix) {
       }
 
       const td = document.createElement("td");
-      td.className = `o-heat-cell${hasData ? "" : " is-empty"}`;
-      td.style.backgroundColor = hasData ? oLevelColor(successRate) : "rgba(120, 131, 143, 0.55)";
+      td.className = `o-heat-cell${hasData ? "" : " is-empty"}${leniencyBlocked ? " is-leniency-blocked" : ""}${targetKey && mpkInteractive ? " is-lockable" : ""}${isLocked ? " is-locked" : ""}`;
+      td.style.backgroundColor = leniencyBlocked
+        ? "rgba(0, 0, 0, 0.92)"
+        : hasData
+          ? oLevelColor(successRate)
+          : "rgba(120, 131, 143, 0.55)";
+      const blockedText = leniencyBlocked
+        ? `\nExcluded by leniency target > ${Number(selectedLeniencyTarget ?? 0).toFixed(2)}`
+        : "";
+      const lockedText = targetKey ? `\nLock: ${isLocked ? "ON" : "OFF"} (click to toggle)` : "";
       td.title = hasData
         ? `${rowLabel} | O ${level}\n${successes}/${attempts} (${successRate.toFixed(
             2
-          )}%)\n${standingLines}`
-        : `${rowLabel} | O ${level}\nNo attempts\nNo standing-height samples`;
+          )}%)\n${leniencyText}${blockedText}${lockedText}\n${standingLines}`
+        : `${rowLabel} | O ${level}\nNo attempts\n${leniencyText}${blockedText}${lockedText}\nNo standing-height samples`;
+      if (targetKey && mpkInteractive) {
+        td.addEventListener("click", () => {
+          if (lockRequestInFlight) return;
+          const shouldLock = !lockedMpkTargets.has(targetKey);
+          toggleMpkHeatmapLock(targetKey, shouldLock);
+        });
+      }
       if (hasData) {
         const yText = bestStandingY === null ? "Y-" : `Y${bestStandingY}`;
         td.innerHTML = `<div class="o-cell-wrap"><span class="o-cell-rate">${Math.round(
           successRate
-        )}%</span><span class="o-cell-y">${yText}</span><span class="o-cell-attempts">${attempts} att</span></div>`;
+        )}%</span><span class="o-cell-y">${yText}</span><span class="o-cell-attempts">${attempts} att</span><span class="o-cell-leniency">${leniencyText}</span></div>`;
+      } else if (hasLeniency) {
+        td.innerHTML = `<div class="o-cell-wrap"><span class="o-cell-leniency is-empty">${leniencyText}</span></div>`;
       } else {
         td.textContent = "";
       }
@@ -178,6 +210,44 @@ function setText(id, value) {
   if (node) node.textContent = value;
 }
 
+function setHtml(id, value) {
+  const node = document.getElementById(id);
+  if (node) node.innerHTML = value;
+}
+
+function buildLeniencyInlineHtml(leniencyValue, thresholdValue, maxLeniencyValue) {
+  if (leniencyValue === null || leniencyValue === undefined || Number.isNaN(Number(leniencyValue))) {
+    return `<span class="leniency-inline"><span class="leniency-dot-glyph leniency-dot-unknown">●</span>L -</span>`;
+  }
+  const leniency = Number(leniencyValue);
+  const threshold = Number(thresholdValue || 0);
+  const maxLeniency = Math.max(Number(maxLeniencyValue || 0), threshold + 0.01);
+  const ratio = clamp((leniency - threshold) / (maxLeniency - threshold), 0, 1);
+  const hue = 6 + ratio * 138;
+  const dotColor = `hsl(${hue}deg 82% 54%)`;
+  return `<span class="leniency-inline"><span class="leniency-dot-glyph" style="color:${dotColor}">●</span>L ${leniency.toFixed(2)}</span>`;
+}
+
+function enforcePracticeSplitLayout() {
+  const grid = document.querySelector(".practice-target-grid");
+  if (!grid) return;
+  grid.style.display = "grid";
+  grid.style.gridTemplateColumns = "repeat(2, minmax(0, 1fr))";
+  grid.style.gap = "0";
+  grid.style.border = "1px solid rgba(129, 199, 255, 0.24)";
+  grid.style.borderRadius = "12px";
+  grid.style.overflow = "hidden";
+  grid.style.background = "rgba(9, 23, 33, 0.42)";
+  const panels = Array.from(grid.querySelectorAll(".practice-target-panel"));
+  panels.forEach((panel, idx) => {
+    panel.style.border = "0";
+    panel.style.borderRadius = "0";
+    panel.style.padding = "0.58rem 0.68rem";
+    panel.style.background = "transparent";
+    panel.style.borderLeft = idx > 0 ? "1px solid rgba(129, 199, 255, 0.22)" : "0";
+  });
+}
+
 function formatDateTime(value) {
   if (!value) return "-";
   const d = new Date(value);
@@ -185,16 +255,153 @@ function formatDateTime(value) {
   return d.toLocaleString();
 }
 
+function renderMpkSetupCard(health) {
+  const card = document.getElementById("mpkSetupCard");
+  const message = document.getElementById("mpkSetupMessage");
+  const status = document.getElementById("mpkSetupStatus");
+  const input = document.getElementById("mpkInstancePathInput");
+  const clearBtn = document.getElementById("mpkClearBtn");
+  if (!card || !message || !status || !input) return;
+  const mpkEnabled = !!(health && health.mpk_enabled);
+  const required = !!(health && health.mpk_setup_required && mpkEnabled);
+  card.classList.toggle("hidden", !mpkEnabled);
+  if (!mpkEnabled) return;
+  if (clearBtn) {
+    const hasConfiguredPath = String((health && health.mpk_instance_path) || "").trim().length > 0;
+    clearBtn.disabled = !hasConfiguredPath;
+  }
+  const setupError = String((health && health.mpk_setup_error) || "").trim();
+  if (required) {
+    message.textContent =
+      setupError ||
+      "Configured MPK instance path is missing/invalid. Set your MultiMC instance path so injector can configure Atum and datapack.";
+  } else {
+    message.textContent = "MPK injector is configured. You can update the instance path or uninject and clear it.";
+  }
+  if (document.activeElement !== input) {
+    input.value = String((health && health.mpk_instance_path) || "");
+  }
+}
+
+function formatMpkTargetMain(side, towerName, oLevel) {
+  const sideText = String(side || "").trim();
+  const towerText = String(towerName || "").trim();
+  const oText =
+    oLevel === null || oLevel === undefined || Number.isNaN(Number(oLevel))
+      ? ""
+      : ` (O${Number(oLevel)})`;
+  const main = `${sideText} ${towerText}`.trim();
+  return main ? `${main}${oText}` : "-";
+}
+
+function normalizeLockedTargetKeys(rawKeys) {
+  if (!Array.isArray(rawKeys)) return new Set();
+  const out = new Set();
+  for (const raw of rawKeys) {
+    const key = String(raw || "").trim();
+    if (key.startsWith("mpk|")) out.add(key);
+  }
+  return out;
+}
+
+function formatMpkTargetFromKey(targetKey) {
+  const parts = String(targetKey || "").split("|");
+  if (parts.length !== 4 || parts[0] !== "mpk") return String(targetKey || "");
+  const towerName = parts[1];
+  const side = parts[2];
+  const oLevel = Number(parts[3]);
+  return formatMpkTargetMain(side, towerName, Number.isNaN(oLevel) ? null : oLevel);
+}
+
+function updateMpkLockControls(widget) {
+  const lockRow = document.querySelector(".practice-lock-row");
+  const clearBtn = document.getElementById("clearMpkLocksBtn");
+  const isMpk = widget && widget.source === "mpk";
+  if (lockRow) {
+    lockRow.style.display = isMpk ? "flex" : "none";
+  }
+  if (clearBtn) {
+    clearBtn.style.display = isMpk ? "" : "none";
+    const lockCount = lockedMpkTargets.size;
+    clearBtn.disabled = lockRequestInFlight || lockCount === 0;
+    clearBtn.textContent = lockRequestInFlight ? "Updating..." : "Clear Lock List";
+  }
+  if (!isMpk) return;
+  const labels = Array.from(lockedMpkTargets).map((k) => formatMpkTargetFromKey(k));
+  const lockSummary =
+    labels.length > 0
+      ? `Lock list (${labels.length}): ${labels.join(", ")}`
+      : "Lock list: none (click heatmap cells to add multiple targets).";
+  setText("practiceMissingTowers", lockSummary);
+  setText("practiceMissing18", "");
+}
+
+async function postMpkLockTarget(targetKey, locked) {
+  const params = new URLSearchParams();
+  params.set("target_key", String(targetKey || ""));
+  if (locked !== null && locked !== undefined) {
+    params.set("locked", locked ? "true" : "false");
+  }
+  const res = await fetch(`/api/mpk/lock-target?${params.toString()}`, { method: "POST" });
+  const json = await res.json();
+  if (!res.ok || !json.ok) {
+    throw new Error(json.error || `Lock update failed (${res.status})`);
+  }
+  return normalizeLockedTargetKeys(json.locked_target_keys || []);
+}
+
+async function postClearMpkLocks() {
+  const res = await fetch("/api/mpk/lock-targets/clear", { method: "POST" });
+  const json = await res.json();
+  if (!res.ok || !json.ok) {
+    throw new Error(json.error || `Clear lock list failed (${res.status})`);
+  }
+  return normalizeLockedTargetKeys(json.locked_target_keys || []);
+}
+
+async function toggleMpkHeatmapLock(targetKey, nextLocked) {
+  if (!targetKey || lockRequestInFlight) return;
+  lockRequestInFlight = true;
+  updateMpkLockControls(lastPayload?.practice_next || {});
+  try {
+    lockedMpkTargets = await postMpkLockTarget(targetKey, nextLocked);
+    await refresh("full");
+  } catch (error) {
+    console.error("Failed to update MPK lock list:", error);
+  } finally {
+    lockRequestInFlight = false;
+    updateMpkLockControls(lastPayload?.practice_next || {});
+  }
+}
+
 function renderPracticeNext(payload) {
+  enforcePracticeSplitLayout();
   const widget = payload.practice_next || {};
+  if (Array.isArray(widget.locked_target_keys)) {
+    lockedMpkTargets = normalizeLockedTargetKeys(widget.locked_target_keys);
+  }
   const rec = widget.recommended;
+  const copyBtn = document.getElementById("copyPracticeCommandBtn");
+  const soundBtn = document.getElementById("testPracticeSoundBtn");
+  const commandRow = document.querySelector(".practice-command-row");
+  setText("practiceCurrentHeading", "Current");
+  setText("practiceNextHeading", "Next");
+  setHtml("practiceCurrentLeniency", "");
+  setHtml("practiceNextLeniency", "");
   if (widget.disabled) {
+    if (commandRow) commandRow.style.display = widget.source === "mpk" ? "none" : "";
+    if (soundBtn) soundBtn.style.display = widget.source === "mpk" ? "none" : "";
+    setText("practiceCurrentMain", "");
+    setText("practiceCurrentStats", "");
+    setText("practiceCurrentReason", "");
     setText("practiceNextMain", "What To Practice Next is disabled for MPK view.");
+    setText("practiceNextStats", "");
+    setText("practiceNextReason", "");
     setText("practiceNextMeta", widget.disabled_reason || "");
     setText("practiceNextCommand", "");
     setText("practiceMissingTowers", "");
     setText("practiceMissing18", "");
-    const copyBtn = document.getElementById("copyPracticeCommandBtn");
+    updateMpkLockControls(widget);
     if (copyBtn) {
       copyBtn.disabled = true;
       copyBtn.textContent = "Copy";
@@ -208,7 +415,6 @@ function renderPracticeNext(payload) {
     return;
   }
   const windowSize = widget.window_size || 250;
-  const copyBtn = document.getElementById("copyPracticeCommandBtn");
   const progressBar = document.getElementById("practiceDataProgressBar");
   const progressTextNode = document.getElementById("practiceDataProgressText");
   const distribution = widget.distribution || {};
@@ -222,11 +428,29 @@ function renderPracticeNext(payload) {
     progressBar.style.width = `${widthPct}%`;
   }
   if (progressTextNode) {
-    progressTextNode.textContent =
-      `Data coverage (last ${windowSize}): ${coveragePct.toFixed(2)}% (${qualifiedTargets}/${totalTargets} targets with >=${minPointsPerTarget} attempts). Need ${thresholdPct.toFixed(0)}%.`;
+    if (widget.source === "mpk") {
+      const eligibleTargets = Number(distribution.eligible_targets || totalTargets);
+      const seedTargets = Number(distribution.seed_targets || totalTargets);
+      const modeCoverage = Number(distribution.mode_coverage_percent || 0);
+      const modeQualified = Number(distribution.mode_qualified_targets || 0);
+      const modeTotal = Number(distribution.mode_total_targets || totalTargets);
+      const modeMinSamples = Number(distribution.min_points_per_target || 2);
+      progressTextNode.textContent =
+        `MPK attempted: ${coveragePct.toFixed(2)}% (${qualifiedTargets}/${totalTargets}); sample coverage (>=${modeMinSamples}): ${modeCoverage.toFixed(2)}% (${modeQualified}/${modeTotal}); eligible by leniency: ${eligibleTargets}/${seedTargets}.`;
+    } else {
+      progressTextNode.textContent =
+        `Data coverage (last ${windowSize}): ${coveragePct.toFixed(2)}% (${qualifiedTargets}/${totalTargets} targets with >=${minPointsPerTarget} attempts). Need ${thresholdPct.toFixed(0)}%.`;
+    }
   }
   if (!rec) {
+    if (commandRow) commandRow.style.display = widget.source === "mpk" ? "none" : "";
+    if (soundBtn) soundBtn.style.display = widget.source === "mpk" ? "none" : "";
+    setText("practiceCurrentMain", "");
+    setText("practiceCurrentStats", "");
+    setText("practiceCurrentReason", "");
     setText("practiceNextMain", "No recommendation yet.");
+    setText("practiceNextStats", "");
+    setText("practiceNextReason", "");
     setText("practiceNextMeta", "");
     setText("practiceNextCommand", "");
     currentPracticeCommand = "";
@@ -237,50 +461,136 @@ function renderPracticeNext(payload) {
     }
     setText("practiceMissingTowers", "");
     setText("practiceMissing18", "");
+    updateMpkLockControls(widget);
     return;
   }
-  const currentTargetKey = `${rec.tower_name}|${rec.side}|${rec.rotation}`;
+  const currentTargetKey =
+    rec.target_kind === "mpk_zero"
+      ? `${rec.tower_name}|${rec.side}|${Number(rec.o_level || -1)}`
+      : `${rec.tower_name}|${rec.side}|${rec.rotation}`;
   const shouldPlaySwitchSound =
     lastPracticeTargetKey && currentTargetKey !== lastPracticeTargetKey;
   lastPracticeTargetKey = currentTargetKey;
   if (rec.target_kind === "full_random") {
-    setText("practiceNextMain", "Target: Full Random");
+    if (commandRow) commandRow.style.display = "";
+    if (soundBtn) soundBtn.style.display = "";
+    setText("practiceCurrentMain", "");
+    setText("practiceCurrentStats", "");
+    setText("practiceCurrentReason", "");
+    setText("practiceNextMain", "Full Random");
+    setText("practiceNextStats", "");
+    setText("practiceNextReason", "");
     setText(
       "practiceNextMeta",
       `Not enough balanced data yet. Play full random until coverage reaches ${thresholdPct.toFixed(0)}%.`
     );
+  } else if (rec.target_kind === "mpk_zero") {
+    if (commandRow) commandRow.style.display = "none";
+    if (soundBtn) soundBtn.style.display = "none";
+    const current = widget.current_practice || null;
+    const currentModeLabel = String((current && current.selection_mode) || "").trim() || "n/a";
+    const nextModeLabel = String(widget.selection_mode || "").trim() || "n/a";
+    setText("practiceCurrentHeading", `Current (${currentModeLabel})`);
+    setText("practiceNextHeading", `Next (${nextModeLabel})`);
+    const currentLabel =
+      current && current.o_level !== null && current.o_level !== undefined
+        ? formatMpkTargetMain(current.side, current.tower_name, current.o_level)
+        : current && current.seed_value
+          ? `Unknown target (Seed ${current.seed_value})`
+          : "Waiting for run start";
+    setText("practiceCurrentMain", currentLabel);
+    setText("practiceNextMain", formatMpkTargetMain(rec.side, rec.tower_name, rec.o_level));
+    const seedValue = rec.selected_seed ? String(rec.selected_seed) : "-";
+    const leniencyThreshold = Number(widget.leniency_target || 0);
+    const maxLeniency = Number(distribution.max_leniency || 0);
+    const currentLeniencyPill = buildLeniencyInlineHtml(
+      current && current.leniency,
+      leniencyThreshold,
+      maxLeniency
+    );
+    const nextLeniencyPill = buildLeniencyInlineHtml(rec.leniency, leniencyThreshold, maxLeniency);
+    setHtml("practiceCurrentLeniency", currentLeniencyPill);
+    setHtml("practiceNextLeniency", nextLeniencyPill);
+    setHtml(
+      "practiceCurrentStats",
+      current
+        ? `Success ${formatPct(current.success_rate)} (${Number(current.successes || 0)}/${Number(current.attempts || 0)})`
+        : "No run loaded yet."
+    );
+    const weakMin = Number(widget.min_streak_to_swap || 3);
+    if (current && String(current.selection_mode || "").toLowerCase() === "weak") {
+      const currentWeakStreak = Number(current.weak_streak ?? 0);
+      const currentWeakLock = !!current.weak_lock_active;
+      setText(
+        "practiceCurrentReason",
+        `Weak streak: ${currentWeakStreak}/${weakMin}${currentWeakLock ? " (locked)" : ""}.`
+      );
+    } else {
+      setText("practiceCurrentReason", "");
+    }
+    setHtml(
+      "practiceNextStats",
+      `Success ${formatPct(rec.success_rate)} (${rec.successes}/${rec.attempts}) | Seed ${seedValue}`
+    );
+    if (String(widget.selection_mode || "").toLowerCase() === "weak") {
+      const nextWeakStreak = Number(
+        rec.weak_streak ?? widget.current_streak_on_recommended ?? 0
+      );
+      const nextWeakLock = !!(rec.weak_lock_active || widget.lock_applied);
+      setText(
+        "practiceNextReason",
+        `Weak streak: ${nextWeakStreak}/${weakMin}${nextWeakLock ? " (locked)" : ""}.`
+      );
+    } else {
+      setText("practiceNextReason", "");
+    }
+    setText("practiceNextMeta", "");
   } else {
-    setText("practiceNextMain", `Target: ${rec.tower_name} | ${rec.side} | ${rec.rotation}`);
+    if (commandRow) commandRow.style.display = "";
+    if (soundBtn) soundBtn.style.display = "";
+    setText("practiceCurrentMain", "");
+    setText("practiceCurrentStats", "");
+    setText("practiceCurrentReason", "");
+    setText("practiceNextMain", `${rec.tower_name} | ${rec.side} | ${rec.rotation}`);
+    setText("practiceNextStats", `Success ${formatPct(rec.success_rate)} (${rec.successes}/${rec.attempts})`);
     const streak = Number(widget.current_streak_on_recommended || 0);
     const minStreak = Number(widget.min_streak_to_swap || 3);
     const lockText = widget.lock_applied
       ? `Locked: keep this target until target streak reaches ${minStreak} (current target streak: ${streak}).`
       : `Not locked: target streak ${streak}/${minStreak}.`;
+    setText("practiceNextReason", "");
     setText(
       "practiceNextMeta",
-      `Last ${windowSize} attempts: success ${formatPct(rec.success_rate)} (${rec.successes}/${rec.attempts}). ${lockText}`
+      `Last ${windowSize} attempts. ${lockText}`
     );
   }
   currentPracticeCommand = rec.chat_command ? String(rec.chat_command) : "";
-  setText("practiceNextCommand", currentPracticeCommand ? `Paste in chat: ${currentPracticeCommand}` : "");
+  if (rec.target_kind === "mpk_zero") {
+    setText("practiceNextCommand", "");
+  } else {
+    setText("practiceNextCommand", currentPracticeCommand ? `Paste in chat: ${currentPracticeCommand}` : "");
+  }
   if (copyBtn) {
-    copyBtn.disabled = !currentPracticeCommand;
+    copyBtn.disabled = rec.target_kind === "mpk_zero" || !currentPracticeCommand;
     copyBtn.textContent = "Copy";
   }
   const missingTowers = widget.missing_towers || [];
   const missing18 = widget.missing_1_8_groups || [];
-  setText(
-    "practiceMissingTowers",
-    missingTowers.length > 0
-      ? `Towers not yet attempted in last ${windowSize}: ${missingTowers.join(", ")}`
-      : `All non-1/8 towers were attempted in last ${windowSize}.`
-  );
-  setText(
-    "practiceMissing18",
-    missing18.length > 0
-      ? `1/8 groups not yet attempted in last ${windowSize}: ${missing18.join(", ")}`
-      : `All observed 1/8 groups were attempted in last ${windowSize}.`
-  );
+  if (rec.target_kind !== "mpk_zero" && widget.source !== "mpk") {
+    setText(
+      "practiceMissingTowers",
+      missingTowers.length > 0
+        ? `Unattempted targets: ${missingTowers.join(", ")}`
+        : `All non-1/8 towers were attempted in last ${windowSize}.`
+    );
+    setText(
+      "practiceMissing18",
+      missing18.length > 0
+        ? `1/8 groups not yet attempted in last ${windowSize}: ${missing18.join(", ")}`
+        : `All observed 1/8 groups were attempted in last ${windowSize}.`
+    );
+  }
+  updateMpkLockControls(widget);
   if (shouldPlaySwitchSound) {
     playPracticeSwitchSound();
   }
@@ -438,24 +748,11 @@ function updateFilters(payload) {
 }
 
 function ensureFilterDefaults() {
-  const sourceSelect = document.getElementById("sourceFilter");
+  const leniencyInput = document.getElementById("leniencyTarget");
   const windowSelect = document.getElementById("windowFilter");
   const rotationSelect = document.getElementById("rotationFilter");
   const towerSelect = document.getElementById("towerFilter");
   const sideSelect = document.getElementById("sideFilter");
-  if (sourceSelect && sourceSelect.options.length === 0) {
-    const options = [
-      ["all", "All Data"],
-      ["practice", "Practice Map"],
-      ["mpk", "MPK Seeds"],
-    ];
-    for (const [value, label] of options) {
-      const opt = document.createElement("option");
-      opt.value = value;
-      opt.textContent = label;
-      sourceSelect.appendChild(opt);
-    }
-  }
   if (rotationSelect && rotationSelect.options.length === 0) {
     const options = [
       ["both", "Both"],
@@ -496,6 +793,9 @@ function ensureFilterDefaults() {
     opt.value = "__GLOBAL__";
     opt.textContent = "Both Sides";
     sideSelect.appendChild(opt);
+  }
+  if (leniencyInput && leniencyInput.value === "") {
+    leniencyInput.value = selectedLeniencyTarget === null ? "" : String(selectedLeniencyTarget);
   }
 }
 
@@ -1007,25 +1307,79 @@ function renderAttemptTable(rows) {
   if (!tbody) return;
   tbody.innerHTML = "";
   for (const row of rows.slice(0, 60)) {
-    let rotExpl = "-";
+    let statusLabel = String(row.status || "");
+    if (statusLabel === "fail" && String(row.fail_reason || "") === "broke_crystal") {
+      statusLabel = "fail ( broke crystal )";
+    }
+    let rotExplMain = "-";
     if (row.rotations !== null && row.rotations !== undefined) {
       if (row.explosives_left === null || row.explosives_left === undefined) {
-        rotExpl = `${row.rotations}`;
+        rotExplMain = `${row.rotations}`;
       } else {
-        rotExpl = `${row.rotations}+${row.explosives_left}`;
+        rotExplMain = `${row.rotations}+${row.explosives_left}`;
       }
     }
+    const bedsExploded = Number(row.beds_exploded || 0);
+    const anchorsExploded = Number(row.anchors_exploded || 0);
+    const hasExplodeBreakdown =
+      String(row.attempt_source || "").toLowerCase() === "mpk" &&
+      Number.isFinite(bedsExploded) &&
+      Number.isFinite(anchorsExploded) &&
+      bedsExploded + anchorsExploded > 0;
+    const rotExpl = hasExplodeBreakdown
+      ? `<div class="attempt-explosive-main">${rotExplMain}</div><div class="attempt-explosive-sub">(${bedsExploded}b${anchorsExploded}a)</div>`
+      : rotExplMain;
+    const bowShots = Number(row.bow_shots || 0);
+    const crossbowShots = Number(row.crossbow_shots || 0);
+    const totalBowShots =
+      row.bow_shots_total === null || row.bow_shots_total === undefined
+        ? bowShots + crossbowShots
+        : Number(row.bow_shots_total || 0);
+    const bowShotsText =
+      totalBowShots > 0 ? `${totalBowShots} (${bowShots}+${crossbowShots})` : "0";
+    const oLevelText =
+      row.o_level === null || row.o_level === undefined || Number.isNaN(Number(row.o_level))
+        ? "-"
+        : `O${Number(row.o_level)}`;
+    const isOneEightText =
+      row.is_1_8 === null || row.is_1_8 === undefined ? "-" : row.is_1_8 ? "Yes" : "No";
+    const standingYText =
+      row.standing_height === null ||
+      row.standing_height === undefined ||
+      Number.isNaN(Number(row.standing_height))
+        ? "-"
+        : `Y${Number(row.standing_height)}`;
     const tr = document.createElement("tr");
+    const tooltipParts = [];
+    if (crossbowShots > 0 || bowShots > 0) {
+      tooltipParts.push(`Bow shots: ${bowShots}, Crossbow shots: ${crossbowShots}`);
+    }
+    if (String(row.status || "") === "flyaway") {
+      const flyY =
+        row.flyaway_dragon_y === null || row.flyaway_dragon_y === undefined
+          ? "?"
+          : String(row.flyaway_dragon_y);
+      const flyNode = row.flyaway_node ? String(row.flyaway_node) : "?";
+      const flyGt = Number(row.flyaway_gt || 0);
+      const flyCrystals =
+        row.flyaway_crystals_alive === null || row.flyaway_crystals_alive === undefined
+          ? "?"
+          : String(row.flyaway_crystals_alive);
+      tooltipParts.push(`Flyaway: node=${flyNode}, y=${flyY}, gt=${flyGt}, crystals=${flyCrystals}`);
+    }
+    tr.title = tooltipParts.join(" | ");
     tr.innerHTML = `
       <td>${row.id}</td>
       <td>${formatDateTime(row.started_at_utc)}</td>
       <td>${String(row.attempt_source || "practice").toUpperCase()}</td>
-      <td class="status-${row.status}">${row.status}</td>
+      <td class="status-${row.status}">${statusLabel}</td>
       <td>${row.tower_name || "Unknown"}</td>
       <td>${sideFromType(row.zero_type)}</td>
-      <td>${row.bed_count}</td>
+      <td>${isOneEightText}</td>
+      <td>${oLevelText}</td>
+      <td>${standingYText}</td>
+      <td>${bowShotsText}</td>
       <td>${row.total_damage}</td>
-      <td>${row.major_hit_count}</td>
       <td>${rotExpl}</td>
       <td>${formatSec(row.success_time_seconds)}</td>
     `;
@@ -1037,23 +1391,15 @@ function renderPayload(payload) {
   const isFirstRender = lastPayload === null;
   lastPayload = payload;
   ensureCharts();
-  const sourceSelect = document.getElementById("sourceFilter");
-  if (sourceSelect) {
-    const sourceOptions = payload.attempt_source_options || [];
-    const knownKeys = sourceOptions.map((o) => o.key);
-    if (sourceOptions.length > 0 && sourceSelect.options.length !== sourceOptions.length) {
-      sourceSelect.innerHTML = "";
-      for (const row of sourceOptions) {
-        const opt = document.createElement("option");
-        opt.value = row.key;
-        opt.textContent = row.label;
-        sourceSelect.appendChild(opt);
-      }
+  const leniencyInput = document.getElementById("leniencyTarget");
+  if (leniencyInput) {
+    const incoming = Number(payload.selected_leniency_target ?? selectedLeniencyTarget ?? 0);
+    if (!Number.isNaN(incoming)) {
+      selectedLeniencyTarget = incoming;
     }
-    if (!knownKeys.includes(selectedSource)) {
-      selectedSource = payload.selected_attempt_source || "all";
+    if (document.activeElement !== leniencyInput) {
+      leniencyInput.value = String(selectedLeniencyTarget);
     }
-    sourceSelect.value = selectedSource;
   }
   const includeToggle = document.getElementById("includeOneEight");
   if (includeToggle) {
@@ -1248,7 +1594,9 @@ function buildDashboardUrl(detail = "full") {
   params.set("include_1_8", includeOneEight ? "true" : "false");
   params.set("rotation", selectedRotation);
   params.set("window", selectedWindow);
-  params.set("attempt_source", selectedSource);
+  if (selectedLeniencyTarget !== null && !Number.isNaN(Number(selectedLeniencyTarget))) {
+    params.set("leniency_target", String(selectedLeniencyTarget));
+  }
   if (selectedTower !== "__GLOBAL__") {
     params.set("tower", selectedTower);
   }
@@ -1262,28 +1610,19 @@ async function refresh(detail = "full") {
   try {
     const [healthRes, dashboardRes] = await Promise.all([fetch("/api/health"), fetch(buildDashboardUrl(detail))]);
     const health = await healthRes.json();
+    lastHealth = health;
+    renderMpkSetupCard(health);
     const payload = await dashboardRes.json();
 
     renderPayload(payload);
 
     const healthDot = document.getElementById("healthDot");
     const healthText = document.getElementById("healthText");
-    const practiceAlive = !!(health.ok && health.log_exists);
     const mpkAlive = !!(health.ok && health.mpk_enabled && health.mpk_log_exists);
-    const alive =
-      selectedSource === "practice"
-        ? practiceAlive
-        : selectedSource === "mpk"
-          ? mpkAlive
-          : (practiceAlive || mpkAlive);
+    const alive = mpkAlive;
     healthDot.className = `dot ${alive ? "dot-on" : "dot-off"}`;
     healthText.textContent = alive ? "Reader active" : "Log path not found";
-    const watchLabel =
-      selectedSource === "practice"
-        ? health.log_path
-        : selectedSource === "mpk"
-          ? health.mpk_log_path
-          : `${health.log_path} + ${health.mpk_log_path}`;
+    const watchLabel = health.mpk_log_path;
     setText(
       "lastUpdated",
       `Updated ${new Date(payload.server_time_utc).toLocaleTimeString()} | Watching: ${watchLabel}`
@@ -1301,16 +1640,12 @@ async function refreshHealth() {
   try {
     const healthRes = await fetch("/api/health");
     const health = await healthRes.json();
+    lastHealth = health;
+    renderMpkSetupCard(health);
     const healthDot = document.getElementById("healthDot");
     const healthText = document.getElementById("healthText");
-    const practiceAlive = !!(health.ok && health.log_exists);
     const mpkAlive = !!(health.ok && health.mpk_enabled && health.mpk_log_exists);
-    const alive =
-      selectedSource === "practice"
-        ? practiceAlive
-        : selectedSource === "mpk"
-          ? mpkAlive
-          : (practiceAlive || mpkAlive);
+    const alive = mpkAlive;
     healthDot.className = `dot ${alive ? "dot-on" : "dot-off"}`;
     healthText.textContent = alive ? "Reader active" : "Log path not found";
   } catch {
@@ -1374,13 +1709,93 @@ if (rotationFilter) {
   });
 }
 
-const sourceFilter = document.getElementById("sourceFilter");
-if (sourceFilter) {
-  sourceFilter.addEventListener("change", (event) => {
-    selectedSource = event.target.value;
-    selectedTower = "__GLOBAL__";
-    selectedSide = "__GLOBAL__";
-    refresh("full");
+const mpkSetupForm = document.getElementById("mpkSetupForm");
+if (mpkSetupForm) {
+  mpkSetupForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const input = document.getElementById("mpkInstancePathInput");
+    const status = document.getElementById("mpkSetupStatus");
+    const saveBtn = document.getElementById("mpkSetupSaveBtn");
+    if (!input || !status) return;
+    const path = String(input.value || "").trim();
+    if (!path) {
+      status.textContent = "Error: Please enter an instance path.";
+      return;
+    }
+    if (saveBtn) saveBtn.disabled = true;
+    status.textContent = "Applying MPK injector...";
+    try {
+      const res = await fetch("/api/setup/mpk-instance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        const err = json && json.error ? String(json.error) : `Setup failed (${res.status})`;
+        status.textContent = `Error: ${err}`;
+      } else {
+        status.textContent = "MPK setup complete.";
+      }
+      await refresh("full");
+    } catch (error) {
+      status.textContent = `Error: ${error}`;
+    } finally {
+      if (saveBtn) saveBtn.disabled = false;
+    }
+  });
+}
+
+const mpkClearBtn = document.getElementById("mpkClearBtn");
+if (mpkClearBtn) {
+  mpkClearBtn.addEventListener("click", async () => {
+    const status = document.getElementById("mpkSetupStatus");
+    const saveBtn = document.getElementById("mpkSetupSaveBtn");
+    if (status) status.textContent = "Uninjecting and clearing configured instance path...";
+    mpkClearBtn.disabled = true;
+    if (saveBtn) saveBtn.disabled = true;
+    try {
+      const res = await fetch("/api/setup/mpk-clear", { method: "POST" });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        const err = json && json.error ? String(json.error) : `Clear failed (${res.status})`;
+        if (status) status.textContent = `Error: ${err}`;
+      } else if (status) {
+        status.textContent = "MPK un-injected and path cleared.";
+      }
+      await refresh("full");
+    } catch (error) {
+      if (status) status.textContent = `Error: ${error}`;
+    } finally {
+      if (saveBtn) saveBtn.disabled = false;
+      await refreshHealth();
+    }
+  });
+}
+
+const leniencyTargetInput = document.getElementById("leniencyTarget");
+if (leniencyTargetInput) {
+  const applyLeniencyAndRefresh = (value, immediate = false) => {
+    const parsed = Number(value);
+    selectedLeniencyTarget = Number.isNaN(parsed) ? 0 : parsed;
+    if (leniencyRefreshTimer) {
+      clearTimeout(leniencyRefreshTimer);
+      leniencyRefreshTimer = null;
+    }
+    if (immediate) {
+      refresh("full");
+      return;
+    }
+    leniencyRefreshTimer = setTimeout(() => {
+      leniencyRefreshTimer = null;
+      refresh("full");
+    }, 220);
+  };
+  leniencyTargetInput.addEventListener("input", (event) => {
+    applyLeniencyAndRefresh(event.target.value, false);
+  });
+  leniencyTargetInput.addEventListener("change", (event) => {
+    applyLeniencyAndRefresh(event.target.value, true);
   });
 }
 
@@ -1422,6 +1837,24 @@ if (testPracticeSoundBtn) {
   testPracticeSoundBtn.addEventListener("click", () => {
     unlockPracticeAudio();
     playPracticeSwitchSound();
+  });
+}
+
+const clearMpkLocksBtn = document.getElementById("clearMpkLocksBtn");
+if (clearMpkLocksBtn) {
+  clearMpkLocksBtn.addEventListener("click", async () => {
+    if (lockRequestInFlight || lockedMpkTargets.size === 0) return;
+    lockRequestInFlight = true;
+    updateMpkLockControls(lastPayload?.practice_next || {});
+    try {
+      lockedMpkTargets = await postClearMpkLocks();
+      await refresh("full");
+    } catch (error) {
+      console.error("Failed to clear MPK lock list:", error);
+    } finally {
+      lockRequestInFlight = false;
+      updateMpkLockControls(lastPayload?.practice_next || {});
+    }
   });
 }
 
