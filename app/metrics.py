@@ -772,6 +772,8 @@ def _store_recent_mpk_targets(db: Database, keys: list[str], *, max_items: int =
 
 
 def _mpk_mode_schedule(coverage_percent: float) -> list[str]:
+    if coverage_percent < 50.0:
+        return ["fill"] * 10
     if coverage_percent < 80.0:
         return ["fill"] * 5 + ["weak"] * 1 + ["maintain"] * 4
     if coverage_percent < 95.0:
