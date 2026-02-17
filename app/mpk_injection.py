@@ -124,6 +124,60 @@ class MpkInjector:
                 return None, f"Failed to disable {src.name}: {exc}"
         return renamed, None
 
+    @staticmethod
+    def _is_disabled_mcsr_ranked_mod(path: Path) -> bool:
+        if not path.is_file():
+            return False
+        name_low = path.name.lower()
+        if not name_low.endswith(".jar.disabled"):
+            return False
+        original_name = path.name[: -len(".disabled")]
+        normalized = "".join(ch for ch in original_name.lower() if ch.isalnum())
+        return "mcsr" in normalized and "ranked" in normalized
+
+    def _restore_mcsr_ranked_mods(
+        self,
+        mods_dir: Path,
+        expected_pairs: list[tuple[Path, Path]] | None = None,
+    ) -> list[str]:
+        errors: list[str] = []
+        candidates: list[tuple[Path, Path]] = []
+        seen_disabled: set[str] = set()
+
+        for original_path, disabled_path in (expected_pairs or []):
+            key = str(disabled_path).lower()
+            if key in seen_disabled:
+                continue
+            seen_disabled.add(key)
+            candidates.append((original_path, disabled_path))
+
+        try:
+            for path in sorted(mods_dir.glob("*.jar.disabled"), key=lambda p: p.name.lower()):
+                if not self._is_disabled_mcsr_ranked_mod(path):
+                    continue
+                key = str(path).lower()
+                if key in seen_disabled:
+                    continue
+                seen_disabled.add(key)
+                candidates.append((path.with_name(path.name[: -len(".disabled")]), path))
+        except Exception as exc:
+            errors.append(f"Failed scanning ranked mod disables in {mods_dir}: {exc}")
+            return errors
+
+        for original_path, disabled_path in candidates:
+            if not disabled_path.exists():
+                continue
+            if original_path.exists():
+                errors.append(
+                    f"Ranked mod restore skipped for {disabled_path.name}: {original_path.name} already exists."
+                )
+                continue
+            try:
+                disabled_path.rename(original_path)
+            except Exception as exc:
+                errors.append(f"Ranked mod restore failed for {disabled_path.name}: {exc}")
+        return errors
+
     def normalize_instance_path(self, raw_path: str | Path) -> tuple[Path | None, str | None]:
         raw_text = str(raw_path or "").strip().strip('"')
         if not raw_text:
@@ -411,18 +465,12 @@ class MpkInjector:
         except Exception as exc:
             errors.append(f"Datapack restore failed: {exc}")
 
-        try:
-            for original_path, disabled_path in token.disabled_ranked_mods:
-                if not disabled_path.exists():
-                    continue
-                if original_path.exists():
-                    errors.append(
-                        f"Ranked mod restore skipped for {disabled_path.name}: {original_path.name} already exists."
-                    )
-                    continue
-                disabled_path.rename(original_path)
-        except Exception as exc:
-            errors.append(f"Ranked mod restore failed: {exc}")
+        errors.extend(
+            self._restore_mcsr_ranked_mods(
+                token.runtime.mods_dir,
+                expected_pairs=token.disabled_ranked_mods,
+            )
+        )
 
         if not errors:
             return None
