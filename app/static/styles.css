@@ -97,6 +97,25 @@ body {
   margin-top: 0.35rem;
 }
 
+.setup-options {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+
+.setup-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.36rem;
+  color: #d8ebf8;
+  font-size: 0.82rem;
+}
+
+.setup-option input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+
 .setup-form input[type="text"] {
   flex: 1 1 560px;
   min-width: 260px;
@@ -127,6 +146,84 @@ body {
 #mpkSetupStatus {
   font-size: 0.82rem;
   color: var(--muted);
+}
+
+.injected-components-wrap {
+  margin-top: 0.5rem;
+  border: 1px solid rgba(129, 199, 255, 0.2);
+  border-radius: 10px;
+  background: rgba(9, 23, 33, 0.5);
+  padding: 0.5rem 0.6rem;
+}
+
+.injected-components-wrap summary {
+  margin: 0;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.injected-components-wrap[open] summary {
+  margin-bottom: 0.35rem;
+}
+
+.injected-components-list {
+  display: grid;
+  gap: 0.32rem;
+}
+
+.injected-component-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.45rem;
+  align-items: flex-start;
+  font-size: 0.82rem;
+}
+
+.injected-component-state {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 4.1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(129, 199, 255, 0.22);
+  padding: 0.08rem 0.42rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.67rem;
+  line-height: 1.2;
+  color: var(--muted);
+  background: rgba(9, 23, 33, 0.85);
+}
+
+.injected-component-state.is-active {
+  border-color: rgba(74, 215, 167, 0.45);
+  color: #d5fff1;
+  background: rgba(21, 70, 52, 0.55);
+}
+
+.injected-component-state.is-present {
+  border-color: rgba(110, 168, 255, 0.45);
+  color: #d5e7ff;
+  background: rgba(31, 57, 96, 0.55);
+}
+
+.injected-component-state.is-missing {
+  border-color: rgba(255, 117, 100, 0.45);
+  color: #ffe0dc;
+  background: rgba(96, 35, 31, 0.55);
+}
+
+.injected-component-name {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.injected-component-desc {
+  color: #cfe2ef;
 }
 
 .hero h1 {
@@ -319,19 +416,80 @@ body {
 }
 
 .practice-progress-track {
+  position: relative;
   width: 100%;
   height: 8px;
   border-radius: 999px;
   background: rgba(157, 194, 217, 0.2);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .practice-progress-fill {
+  position: relative;
+  z-index: 1;
   width: 0%;
   height: 100%;
   border-radius: 999px;
   background: linear-gradient(90deg, #6ea8ff 0%, #4ad7a7 100%);
   transition: width 180ms ease-out;
+}
+
+.practice-thresholds {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.practice-threshold-nook {
+  position: absolute;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  margin-left: -8px;
+  margin-top: -8px;
+  transform: rotate(45deg);
+  border-radius: 3px;
+  border: 2px solid rgba(228, 241, 255, 0.95);
+  background: rgba(8, 14, 20, 0.85);
+  box-shadow: 0 0 0 1px rgba(8, 16, 24, 0.75);
+  pointer-events: auto;
+  cursor: help;
+}
+
+.practice-threshold-nook.is-active {
+  background: #8de8ca;
+  border-color: #d9fbf1;
+}
+
+.practice-threshold-nook::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+}
+
+.practice-threshold-tooltip {
+  position: fixed;
+  z-index: 2500;
+  max-width: 340px;
+  pointer-events: none;
+  white-space: pre-line;
+  background: rgba(4, 15, 24, 0.96);
+  border: 1px solid rgba(129, 199, 255, 0.42);
+  border-radius: 10px;
+  color: #e8f5ff;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  padding: 0.44rem 0.52rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  transform: translateY(2px);
+  transition: opacity 60ms linear, transform 60ms linear;
+}
+
+.practice-threshold-tooltip.is-visible {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 #practiceDataProgressText {
@@ -370,8 +528,69 @@ body {
   cursor: pointer;
 }
 
+#fullRandomOverrideBtn {
+  background: rgba(9, 23, 33, 0.95);
+  color: var(--text);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 0.24rem 0.5rem;
+  font-family: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+#skipWeakLockBtn {
+  background: rgba(9, 23, 33, 0.95);
+  color: var(--text);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 0.24rem 0.5rem;
+  font-family: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
 #clearMpkLocksBtn:hover {
   border-color: var(--accent-soft);
+}
+
+#fullRandomOverrideBtn:hover {
+  border-color: var(--accent-soft);
+}
+
+#skipWeakLockBtn:hover {
+  border-color: var(--accent-soft);
+}
+
+#fullRandomOverrideBtn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+#skipWeakLockBtn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.attempt-retry-btn {
+  background: rgba(9, 23, 33, 0.95);
+  color: var(--text);
+  border: 1px solid var(--card-border);
+  border-radius: 7px;
+  padding: 0.18rem 0.45rem;
+  font-family: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+.attempt-retry-btn:hover {
+  border-color: var(--accent-soft);
+}
+
+.attempt-retry-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
 }
 
 #copyPracticeCommandBtn {

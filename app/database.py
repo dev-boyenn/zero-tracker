@@ -65,6 +65,7 @@ class Database:
             setup_hit_count INTEGER NOT NULL DEFAULT 0,
             max_damage_single_bed INTEGER NOT NULL DEFAULT 0,
             attempt_source TEXT NOT NULL DEFAULT 'practice',
+            attempt_seed_mode TEXT NOT NULL DEFAULT 'set_seed',
             o_level INTEGER,
             flyaway_detected INTEGER NOT NULL DEFAULT 0,
             flyaway_gt INTEGER NOT NULL DEFAULT 0,
@@ -143,6 +144,7 @@ class Database:
             ("attempts", "setup_damage_total", "INTEGER NOT NULL DEFAULT 0"),
             ("attempts", "setup_hit_count", "INTEGER NOT NULL DEFAULT 0"),
             ("attempts", "attempt_source", "TEXT NOT NULL DEFAULT 'practice'"),
+            ("attempts", "attempt_seed_mode", "TEXT NOT NULL DEFAULT 'set_seed'"),
             ("attempts", "o_level", "INTEGER"),
             ("attempts", "flyaway_detected", "INTEGER NOT NULL DEFAULT 0"),
             ("attempts", "flyaway_gt", "INTEGER NOT NULL DEFAULT 0"),
@@ -226,6 +228,21 @@ class Database:
             """
             CREATE INDEX IF NOT EXISTS idx_attempts_source_started
             ON attempts (attempt_source, started_at_utc)
+            """
+        )
+        self._conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_attempts_source_seedmode_started
+            ON attempts (attempt_source, attempt_seed_mode, started_at_utc)
+            """
+        )
+        self._conn.execute(
+            """
+            UPDATE attempts
+            SET attempt_seed_mode = 'set_seed'
+            WHERE attempt_seed_mode IS NULL
+               OR TRIM(COALESCE(attempt_seed_mode, '')) = ''
+               OR attempt_seed_mode NOT IN ('set_seed', 'full_random')
             """
         )
         # Keep MPK tower names aligned with practice-map naming.

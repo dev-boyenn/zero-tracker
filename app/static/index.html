@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Zero Cycle Dashboard</title>
+    <title>Zero Practice Dashboard</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -20,7 +20,7 @@
       <section class="hero card">
         <div>
           <p class="eyebrow">Live Zero Cycle Analytics</p>
-          <h1>Ranked Practice Dashboard</h1>
+          <h1>Zero Practice Dashboard</h1>
           <p id="lastUpdated">Waiting for data...</p>
         </div>
         <div class="health">
@@ -36,6 +36,12 @@
             <option value="last_25">Last 25</option>
             <option value="last_50">Last 50</option>
             <option value="last_100">Last 100</option>
+          </select>
+          <label for="seedModeFilter">Data</label>
+          <select id="seedModeFilter">
+            <option value="all">All Data</option>
+            <option value="full_random">Full Random Only</option>
+            <option value="set_seed">Set Seed Only</option>
           </select>
           <label for="rotationFilter">Rotation</label>
           <select id="rotationFilter">
@@ -66,9 +72,27 @@
             autocomplete="off"
             placeholder="C:\Users\You\Desktop\MultiMC\instances\ZeroPractice or ...\.minecraft"
           />
+          <div class="setup-options">
+            <label class="setup-option">
+              <input id="mpkLegalRankedToggle" type="checkbox" />
+              <span>Legal ranked instance (full random only)</span>
+            </label>
+            <label class="setup-option">
+              <input id="mpkInjectRecipeBookToggle" type="checkbox" checked />
+              <span>Open recipe book on run start</span>
+            </label>
+            <label class="setup-option">
+              <input id="mpkInjectDragonPatchToggle" type="checkbox" checked />
+              <span>Enable dragon node patch mod</span>
+            </label>
+          </div>
           <button id="mpkSetupSaveBtn" type="submit">Save & Inject</button>
           <button id="mpkClearBtn" type="button">Uninject + Clear Path</button>
         </form>
+        <details id="mpkInjectedComponentsDetails" class="injected-components-wrap">
+          <summary>Injected Components</summary>
+          <div id="mpkInjectedComponents" class="injected-components-list"></div>
+        </details>
         <p id="mpkSetupStatus"></p>
       </section>
 
@@ -94,11 +118,14 @@
         <div class="practice-progress-wrap">
           <div class="practice-progress-track">
             <div id="practiceDataProgressBar" class="practice-progress-fill"></div>
+            <div id="practiceDataThresholds" class="practice-thresholds"></div>
           </div>
           <p id="practiceDataProgressText"></p>
         </div>
         <div class="practice-lock-row">
           <button id="clearMpkLocksBtn" type="button">Clear Lock List</button>
+          <button id="skipWeakLockBtn" type="button">Skip Weak Lock</button>
+          <button id="fullRandomOverrideBtn" type="button">Enable Full Random</button>
         </div>
         <div class="practice-command-row">
           <p id="practiceNextCommand"></p>
@@ -129,6 +156,7 @@
                   <th>Total Dmg</th>
                   <th>Explosives</th>
                   <th>Run Time</th>
+                  <th>Retry</th>
                 </tr>
               </thead>
               <tbody id="attemptTable"></tbody>

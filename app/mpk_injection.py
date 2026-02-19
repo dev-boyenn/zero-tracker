@@ -23,18 +23,25 @@ class MpkInjectionToken:
     runtime: MpkRuntimePaths
     atum_json_backup_path: Path
     atum_jar_backup_path: Path
-    atum_jar_target_path: Path
+    atum_jar_target_path: Path | None
     datapack_dst_path: Path
     datapack_backup_path: Path
     had_existing_atum_jar: bool
+    atum_jar_injected: bool
     had_existing_datapack: bool
     prior_atum_jar_name: str | None
     disabled_ranked_mods: list[tuple[Path, Path]]
+    ranked_mods_were_disabled: bool
     fast_reset_config_path: Path | None
     fast_reset_backup_path: Path | None
     recipe_book_target_path: Path
     recipe_book_backup_path: Path
     had_existing_recipe_book_jar: bool
+    recipe_book_injected: bool
+    dragon_patch_target_path: Path
+    dragon_patch_backup_path: Path
+    had_existing_dragon_patch_jar: bool
+    dragon_patch_injected: bool
 
 
 def _safe_unlink(path: Path) -> None:
@@ -71,6 +78,7 @@ class MpkInjector:
     DATAPACK_NAME = "zdash_tracker"
     DATAPACK_ENABLED_KEY = f"file/{DATAPACK_NAME}"
     RECIPE_BOOK_JAR_NAME = "recipe-book.jar"
+    DRAGON_NODE_PATCH_JAR_NAME = "ranked-dragon-node-patch.jar"
     FAST_RESET_CANDIDATE_NAMES = (
         "fast_reset.json",
         "fast-reset.json",
@@ -234,6 +242,33 @@ class MpkInjector:
         jars.sort(key=lambda p: p.stat().st_mtime, reverse=True)
         return jars[0].resolve(), None
 
+    def _find_project_dragon_patch_jar(self) -> tuple[Path | None, str | None]:
+        preferred = self.project_root / self.DRAGON_NODE_PATCH_JAR_NAME
+        if preferred.exists() and preferred.is_file():
+            return preferred.resolve(), None
+
+        root_jars = [
+            p
+            for p in self.project_root.glob("ranked-dragon-node-patch*.jar")
+            if p.is_file() and "sources" not in p.name.lower()
+        ]
+        if root_jars:
+            root_jars.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+            return root_jars[0].resolve(), None
+
+        libs_dir = self.project_root / "dragon_node_patch" / "build" / "libs"
+        if not libs_dir.exists():
+            return None, f"Dragon node patch jar not found in repo root and libs directory not found: {libs_dir}"
+        jars = [
+            p
+            for p in libs_dir.glob("ranked-dragon-node-patch*.jar")
+            if p.is_file() and "sources" not in p.name.lower()
+        ]
+        if not jars:
+            return None, f"Dragon node patch jar not found in repo root or {libs_dir}"
+        jars.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        return jars[0].resolve(), None
+
     def _inject_atum_json(self, atum_json_path: Path, backup_path: Path) -> tuple[bool, str | None]:
         if not atum_json_path.exists():
             return False, f"Atum config not found: {atum_json_path}"
@@ -315,15 +350,32 @@ class MpkInjector:
         config_path.write_text(json.dumps(payload, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
         return True, None
 
-    def apply(self, runtime: MpkRuntimePaths) -> tuple[MpkInjectionToken | None, str | None]:
+    def apply(
+        self,
+        runtime: MpkRuntimePaths,
+        *,
+        inject_recipe_book: bool = True,
+        inject_dragon_patch: bool = True,
+        inject_atum: bool = True,
+        disable_ranked_mods: bool = True,
+    ) -> tuple[MpkInjectionToken | None, str | None]:
         if not self.datapack_src.exists():
             return None, f"Datapack source not found: {self.datapack_src}"
-        recipe_book_src = self.project_root / self.RECIPE_BOOK_JAR_NAME
-        if not recipe_book_src.exists() or not recipe_book_src.is_file():
-            return None, f"Recipe book mod not found: {recipe_book_src}"
-        atum_jar, jar_error = self._find_project_atum_jar()
-        if atum_jar is None:
-            return None, jar_error or "Could not resolve Atum jar."
+        recipe_book_src: Path | None = None
+        if inject_recipe_book:
+            recipe_book_src = self.project_root / self.RECIPE_BOOK_JAR_NAME
+            if not recipe_book_src.exists() or not recipe_book_src.is_file():
+                return None, f"Recipe book mod not found: {recipe_book_src}"
+        atum_jar: Path | None = None
+        if inject_atum:
+            atum_jar, jar_error = self._find_project_atum_jar()
+            if atum_jar is None:
+                return None, jar_error or "Could not resolve Atum jar."
+        dragon_patch_jar: Path | None = None
+        if inject_dragon_patch:
+            dragon_patch_jar, dragon_patch_jar_error = self._find_project_dragon_patch_jar()
+            if dragon_patch_jar is None:
+                return None, dragon_patch_jar_error or "Could not resolve dragon node patch jar."
 
         runtime.atum_datapacks_dir.mkdir(parents=True, exist_ok=True)
         runtime.mods_dir.mkdir(parents=True, exist_ok=True)
@@ -334,6 +386,8 @@ class MpkInjector:
         atum_jar_backup = runtime.mods_dir / "atum_bak.jar.disabled"
         recipe_book_target = runtime.mods_dir / self.RECIPE_BOOK_JAR_NAME
         recipe_book_backup = runtime.mods_dir / "recipe-book_bak.jar.disabled"
+        dragon_patch_target = runtime.mods_dir / self.DRAGON_NODE_PATCH_JAR_NAME
+        dragon_patch_backup = runtime.mods_dir / "ranked-dragon-node-patch_bak.jar.disabled"
         datapack_dst = runtime.atum_datapacks_dir / self.DATAPACK_NAME
         datapack_backup = runtime.atum_datapacks_dir / f"{self.DATAPACK_NAME}_bak"
 
@@ -363,29 +417,57 @@ class MpkInjector:
             shutil.move(str(datapack_dst), str(datapack_backup))
         shutil.copytree(self.datapack_src, datapack_dst)
 
-        atum_jars = sorted(
-            (
-                p
-                for p in runtime.mods_dir.glob("atum*.jar")
-                if p.is_file() and p.name.lower() != atum_jar_backup.name.lower()
-            ),
-            key=lambda p: p.stat().st_mtime,
-            reverse=True,
-        )
-        had_existing_atum_jar = len(atum_jars) > 0
-        prior_atum_jar_name = atum_jars[0].name if atum_jars else None
-        atum_jar_target = runtime.mods_dir / atum_jar.name
-        if had_existing_atum_jar:
-            shutil.copy2(atum_jars[0], atum_jar_backup)
-        for old in atum_jars:
-            _safe_unlink(old)
-        shutil.copy2(atum_jar, atum_jar_target)
+        had_existing_atum_jar = False
+        prior_atum_jar_name: str | None = None
+        atum_jar_target: Path | None = None
+        if inject_atum:
+            atum_jars = sorted(
+                (
+                    p
+                    for p in runtime.mods_dir.glob("atum*.jar")
+                    if p.is_file() and p.name.lower() != atum_jar_backup.name.lower()
+                ),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+            had_existing_atum_jar = len(atum_jars) > 0
+            prior_atum_jar_name = atum_jars[0].name if atum_jars else None
+            assert atum_jar is not None
+            atum_jar_target = runtime.mods_dir / atum_jar.name
+            if had_existing_atum_jar:
+                shutil.copy2(atum_jars[0], atum_jar_backup)
+            for old in atum_jars:
+                _safe_unlink(old)
+            shutil.copy2(atum_jar, atum_jar_target)
 
-        had_existing_recipe_book_jar = recipe_book_target.exists()
-        _safe_unlink(recipe_book_backup)
-        if had_existing_recipe_book_jar:
-            shutil.copy2(recipe_book_target, recipe_book_backup)
-        shutil.copy2(recipe_book_src, recipe_book_target)
+        had_existing_recipe_book_jar = False
+        if inject_recipe_book:
+            had_existing_recipe_book_jar = recipe_book_target.exists()
+            _safe_unlink(recipe_book_backup)
+            if had_existing_recipe_book_jar:
+                shutil.copy2(recipe_book_target, recipe_book_backup)
+            assert recipe_book_src is not None
+            shutil.copy2(recipe_book_src, recipe_book_target)
+
+        had_existing_dragon_patch_jar = False
+        if inject_dragon_patch:
+            dragon_patch_jars = sorted(
+                (
+                    p
+                    for p in runtime.mods_dir.glob("ranked-dragon-node-patch*.jar")
+                    if p.is_file() and p.name.lower() != dragon_patch_backup.name.lower()
+                ),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+            had_existing_dragon_patch_jar = len(dragon_patch_jars) > 0
+            _safe_unlink(dragon_patch_backup)
+            if had_existing_dragon_patch_jar:
+                shutil.copy2(dragon_patch_jars[0], dragon_patch_backup)
+            for old in dragon_patch_jars:
+                _safe_unlink(old)
+            assert dragon_patch_jar is not None
+            shutil.copy2(dragon_patch_jar, dragon_patch_target)
 
         token = MpkInjectionToken(
             runtime=runtime,
@@ -395,22 +477,31 @@ class MpkInjector:
             datapack_dst_path=datapack_dst,
             datapack_backup_path=datapack_backup,
             had_existing_atum_jar=had_existing_atum_jar,
+            atum_jar_injected=inject_atum,
             had_existing_datapack=had_existing_datapack,
             prior_atum_jar_name=prior_atum_jar_name,
             disabled_ranked_mods=[],
+            ranked_mods_were_disabled=False,
             fast_reset_config_path=fast_reset_config_path,
             fast_reset_backup_path=fast_reset_backup_path,
             recipe_book_target_path=recipe_book_target,
             recipe_book_backup_path=recipe_book_backup,
             had_existing_recipe_book_jar=had_existing_recipe_book_jar,
+            recipe_book_injected=inject_recipe_book,
+            dragon_patch_target_path=dragon_patch_target,
+            dragon_patch_backup_path=dragon_patch_backup,
+            had_existing_dragon_patch_jar=had_existing_dragon_patch_jar,
+            dragon_patch_injected=inject_dragon_patch,
         )
-        disabled_ranked_mods, ranked_disable_error = self._disable_mcsr_ranked_mods(runtime.mods_dir)
-        if ranked_disable_error is not None:
-            rollback_error = self.revert(token)
-            if rollback_error:
-                return None, f"{ranked_disable_error}; rollback failed: {rollback_error}"
-            return None, ranked_disable_error
-        token.disabled_ranked_mods = disabled_ranked_mods or []
+        if disable_ranked_mods:
+            disabled_ranked_mods, ranked_disable_error = self._disable_mcsr_ranked_mods(runtime.mods_dir)
+            if ranked_disable_error is not None:
+                rollback_error = self.revert(token)
+                if rollback_error:
+                    return None, f"{ranked_disable_error}; rollback failed: {rollback_error}"
+                return None, ranked_disable_error
+            token.disabled_ranked_mods = disabled_ranked_mods or []
+            token.ranked_mods_were_disabled = True
         return token, None
 
     def revert(self, token: MpkInjectionToken) -> str | None:
@@ -431,29 +522,47 @@ class MpkInjector:
         except Exception as exc:
             errors.append(f"fast reset restore failed: {exc}")
 
-        try:
-            if token.had_existing_atum_jar and token.atum_jar_backup_path.exists():
-                for old in token.runtime.mods_dir.glob("atum*.jar"):
-                    if old.name.lower() == token.atum_jar_backup_path.name.lower():
-                        continue
-                    _safe_unlink(old)
-                restore_name = token.prior_atum_jar_name or token.atum_jar_target_path.name
-                restore_path = token.runtime.mods_dir / restore_name
-                shutil.copy2(token.atum_jar_backup_path, restore_path)
-            else:
-                _safe_unlink(token.atum_jar_target_path)
-            _safe_unlink(token.atum_jar_backup_path)
-        except Exception as exc:
-            errors.append(f"Atum jar restore failed: {exc}")
+        if token.atum_jar_injected:
+            try:
+                if token.had_existing_atum_jar and token.atum_jar_backup_path.exists():
+                    for old in token.runtime.mods_dir.glob("atum*.jar"):
+                        if old.name.lower() == token.atum_jar_backup_path.name.lower():
+                            continue
+                        _safe_unlink(old)
+                    fallback_name = token.atum_jar_target_path.name if token.atum_jar_target_path is not None else "atum.jar"
+                    restore_name = token.prior_atum_jar_name or fallback_name
+                    restore_path = token.runtime.mods_dir / restore_name
+                    shutil.copy2(token.atum_jar_backup_path, restore_path)
+                else:
+                    if token.atum_jar_target_path is not None:
+                        _safe_unlink(token.atum_jar_target_path)
+                _safe_unlink(token.atum_jar_backup_path)
+            except Exception as exc:
+                errors.append(f"Atum jar restore failed: {exc}")
 
-        try:
-            if token.had_existing_recipe_book_jar and token.recipe_book_backup_path.exists():
-                shutil.copy2(token.recipe_book_backup_path, token.recipe_book_target_path)
-            else:
-                _safe_unlink(token.recipe_book_target_path)
-            _safe_unlink(token.recipe_book_backup_path)
-        except Exception as exc:
-            errors.append(f"recipe-book.jar restore failed: {exc}")
+        if token.recipe_book_injected:
+            try:
+                if token.had_existing_recipe_book_jar and token.recipe_book_backup_path.exists():
+                    shutil.copy2(token.recipe_book_backup_path, token.recipe_book_target_path)
+                else:
+                    _safe_unlink(token.recipe_book_target_path)
+                _safe_unlink(token.recipe_book_backup_path)
+            except Exception as exc:
+                errors.append(f"recipe-book.jar restore failed: {exc}")
+
+        if token.dragon_patch_injected:
+            try:
+                if token.had_existing_dragon_patch_jar and token.dragon_patch_backup_path.exists():
+                    for old in token.runtime.mods_dir.glob("ranked-dragon-node-patch*.jar"):
+                        if old.name.lower() == token.dragon_patch_backup_path.name.lower():
+                            continue
+                        _safe_unlink(old)
+                    shutil.copy2(token.dragon_patch_backup_path, token.dragon_patch_target_path)
+                else:
+                    _safe_unlink(token.dragon_patch_target_path)
+                _safe_unlink(token.dragon_patch_backup_path)
+            except Exception as exc:
+                errors.append(f"ranked-dragon-node-patch.jar restore failed: {exc}")
 
         try:
             if token.datapack_dst_path.exists():
@@ -465,12 +574,13 @@ class MpkInjector:
         except Exception as exc:
             errors.append(f"Datapack restore failed: {exc}")
 
-        errors.extend(
-            self._restore_mcsr_ranked_mods(
-                token.runtime.mods_dir,
-                expected_pairs=token.disabled_ranked_mods,
+        if token.ranked_mods_were_disabled:
+            errors.extend(
+                self._restore_mcsr_ranked_mods(
+                    token.runtime.mods_dir,
+                    expected_pairs=token.disabled_ranked_mods,
+                )
             )
-        )
 
         if not errors:
             return None

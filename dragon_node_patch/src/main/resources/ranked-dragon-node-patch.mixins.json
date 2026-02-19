@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.boyen.dragonnodepatch.mixin",
+  "compatibilityLevel": "JAVA_8",
+  "mixins": [
+    "AbstractPhaseAccessor",
+    "EnderDragonEntityStateMixin",
+    "HoldingPatternPhaseMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

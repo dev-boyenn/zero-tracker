@@ -12,6 +12,7 @@ let towerFrontRadarChart;
 let selectedTower = "__GLOBAL__";
 let selectedSide = "__GLOBAL__";
 let selectedWindow = "all";
+let selectedSeedMode = "all";
 let includeOneEight = true;
 let selectedRotation = "both";
 const selectedSource = "mpk";
@@ -20,11 +21,15 @@ let rollingMode = "r50";
 let lastPayload = null;
 let lastHealth = null;
 let leniencyRefreshTimer = null;
+let refreshRequestSeq = 0;
 const expandedTowerRows = new Set();
 let currentPracticeCommand = "";
 let practiceAudioCtx = null;
 let lockedMpkTargets = new Set();
 let lockRequestInFlight = false;
+let fullRandomOverrideRequestInFlight = false;
+let weakLockSkipRequestInFlight = false;
+let thresholdTooltipEl = null;
 let lastWeakLockState = {
   lockActive: false,
   targetKey: "",
@@ -47,6 +52,14 @@ function formatNum(value) {
 function formatNumMaybe(value) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return "-";
   return Number(value).toFixed(2);
+}
+
+function escapeHtmlAttr(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 function clamp(value, minValue, maxValue) {
@@ -260,16 +273,129 @@ function formatDateTime(value) {
   return d.toLocaleString();
 }
 
+function formatRelativeDateTime(value) {
+  if (!value) return "-";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  const now = Date.now();
+  const diffMs = Math.max(0, now - d.getTime());
+  const sec = Math.floor(diffMs / 1000);
+  if (sec < 5) return "just now";
+  if (sec < 60) return `${sec} second${sec === 1 ? "" : "s"} ago`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min} minute${min === 1 ? "" : "s"} ago`;
+  const hours = Math.floor(min / 60);
+  const remMin = min % 60;
+  if (hours < 24) {
+    if (remMin === 0) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+    return `${hours} hour${hours === 1 ? "" : "s"} ${remMin} minute${remMin === 1 ? "" : "s"} ago`;
+  }
+  const days = Math.floor(hours / 24);
+  const remHours = hours % 24;
+  if (days < 7) {
+    if (remHours === 0) return `${days} day${days === 1 ? "" : "s"} ago`;
+    return `${days} day${days === 1 ? "" : "s"} ${remHours} hour${remHours === 1 ? "" : "s"} ago`;
+  }
+  const weeks = Math.floor(days / 7);
+  const remDays = days % 7;
+  if (remDays === 0) return `${weeks} week${weeks === 1 ? "" : "s"} ago`;
+  return `${weeks} week${weeks === 1 ? "" : "s"} ${remDays} day${remDays === 1 ? "" : "s"} ago`;
+}
+
+function renderInjectedComponents(health) {
+  const container = document.getElementById("mpkInjectedComponents");
+  if (!container) return;
+  container.innerHTML = "";
+  const components = Array.isArray(health?.mpk_injected_components)
+    ? health.mpk_injected_components
+    : [];
+  if (components.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "injected-component-desc";
+    empty.textContent = "No injected instance state yet.";
+    container.appendChild(empty);
+    return;
+  }
+  for (const comp of components) {
+    const row = document.createElement("div");
+    row.className = "injected-component-row";
+
+    const present = !!comp?.present;
+    const active = !!comp?.active;
+    const enabled = comp?.enabled !== false;
+    let stateText = "missing";
+    let stateClass = "is-missing";
+    if (!enabled) {
+      stateText = "off";
+      stateClass = present ? "is-present" : "is-missing";
+    } else if (active) {
+      stateText = "active";
+      stateClass = "is-active";
+    } else if (present) {
+      stateText = "present";
+      stateClass = "is-present";
+    }
+
+    const badge = document.createElement("span");
+    badge.className = `injected-component-state ${stateClass}`;
+    badge.textContent = stateText;
+    row.appendChild(badge);
+
+    const body = document.createElement("div");
+    const name = document.createElement("div");
+    name.className = "injected-component-name";
+    name.textContent = String(comp?.name || "Unknown component");
+    body.appendChild(name);
+
+    const desc = document.createElement("div");
+    desc.className = "injected-component-desc";
+    const seed = String(comp?.seed || "").trim();
+    const baseDesc = String(comp?.description || "").trim();
+    desc.textContent = seed ? `${baseDesc} Current seed: ${seed}.` : baseDesc;
+    body.appendChild(desc);
+
+    const expectedPath = String(comp?.expected_path || "").trim();
+    if (expectedPath) {
+      row.title = expectedPath;
+    }
+    row.appendChild(body);
+    container.appendChild(row);
+  }
+}
+
+function syncMpkLegalToggleState() {
+  const legalToggle = document.getElementById("mpkLegalRankedToggle");
+  const recipeToggle = document.getElementById("mpkInjectRecipeBookToggle");
+  const dragonPatchToggle = document.getElementById("mpkInjectDragonPatchToggle");
+  const legalEnabled = !!(legalToggle && legalToggle.checked);
+  if (recipeToggle) {
+    if (legalEnabled) {
+      recipeToggle.checked = false;
+    }
+    recipeToggle.disabled = legalEnabled;
+  }
+  if (dragonPatchToggle) {
+    if (legalEnabled) {
+      dragonPatchToggle.checked = false;
+    }
+    dragonPatchToggle.disabled = legalEnabled;
+  }
+}
+
 function renderMpkSetupCard(health) {
   const card = document.getElementById("mpkSetupCard");
   const message = document.getElementById("mpkSetupMessage");
   const status = document.getElementById("mpkSetupStatus");
   const input = document.getElementById("mpkInstancePathInput");
   const clearBtn = document.getElementById("mpkClearBtn");
+  const legalToggle = document.getElementById("mpkLegalRankedToggle");
+  const recipeToggle = document.getElementById("mpkInjectRecipeBookToggle");
+  const dragonPatchToggle = document.getElementById("mpkInjectDragonPatchToggle");
   if (!card || !message || !status || !input) return;
   const mpkEnabled = !!(health && health.mpk_enabled);
   const required = !!(health && health.mpk_setup_required && mpkEnabled);
   card.classList.toggle("hidden", !mpkEnabled);
+  renderInjectedComponents(health);
   if (!mpkEnabled) return;
   if (clearBtn) {
     const hasConfiguredPath = String((health && health.mpk_instance_path) || "").trim().length > 0;
@@ -286,6 +412,16 @@ function renderMpkSetupCard(health) {
   if (document.activeElement !== input) {
     input.value = String((health && health.mpk_instance_path) || "");
   }
+  if (legalToggle) {
+    legalToggle.checked = !!(health && health.mpk_legal_ranked_instance);
+  }
+  if (recipeToggle) {
+    recipeToggle.checked = !!(health && health.mpk_inject_recipe_book !== false);
+  }
+  if (dragonPatchToggle) {
+    dragonPatchToggle.checked = !!(health && health.mpk_inject_dragon_patch !== false);
+  }
+  syncMpkLegalToggleState();
 }
 
 function formatMpkTargetMain(side, towerName, oLevel) {
@@ -321,7 +457,16 @@ function formatMpkTargetFromKey(targetKey) {
 function updateMpkLockControls(widget) {
   const lockRow = document.querySelector(".practice-lock-row");
   const clearBtn = document.getElementById("clearMpkLocksBtn");
+  const skipWeakBtn = document.getElementById("skipWeakLockBtn");
+  const overrideBtn = document.getElementById("fullRandomOverrideBtn");
+  const legalRankedEnabled = !!(lastHealth && lastHealth.mpk_legal_ranked_instance);
   const isMpk = widget && widget.source === "mpk";
+  const overrideEnabled = !!(widget && widget.full_random_override_enabled);
+  const currentPractice = widget && widget.current_practice ? widget.current_practice : null;
+  const currentMode = String((currentPractice && currentPractice.selection_mode) || "").toLowerCase();
+  const weakLockActive =
+    !!(currentPractice && currentMode === "weak" && currentPractice.weak_lock_active) ||
+    !!(widget && widget.weak_streak_status && widget.weak_streak_status.lock_target);
   if (lockRow) {
     lockRow.style.display = isMpk ? "flex" : "none";
   }
@@ -330,6 +475,22 @@ function updateMpkLockControls(widget) {
     const lockCount = lockedMpkTargets.size;
     clearBtn.disabled = lockRequestInFlight || lockCount === 0;
     clearBtn.textContent = lockRequestInFlight ? "Updating..." : "Clear Lock List";
+  }
+  if (skipWeakBtn) {
+    skipWeakBtn.style.display = isMpk ? "" : "none";
+    skipWeakBtn.disabled = weakLockSkipRequestInFlight || !weakLockActive;
+    skipWeakBtn.textContent = weakLockSkipRequestInFlight ? "Skipping..." : "Skip Weak Lock";
+  }
+  if (overrideBtn) {
+    overrideBtn.style.display = isMpk ? "" : "none";
+    overrideBtn.disabled = fullRandomOverrideRequestInFlight || legalRankedEnabled;
+    overrideBtn.textContent = fullRandomOverrideRequestInFlight
+      ? "Updating..."
+      : legalRankedEnabled
+        ? "Forced (Legal Mode)"
+      : overrideEnabled
+        ? "Disable Full Random"
+        : "Enable Full Random";
   }
   if (!isMpk) return;
   const labels = Array.from(lockedMpkTargets).map((k) => formatMpkTargetFromKey(k));
@@ -364,6 +525,37 @@ async function postClearMpkLocks() {
   return normalizeLockedTargetKeys(json.locked_target_keys || []);
 }
 
+async function postSetSingleMpkLock(targetKey) {
+  const params = new URLSearchParams();
+  params.set("target_key", String(targetKey || ""));
+  const res = await fetch(`/api/mpk/lock-targets/set-single?${params.toString()}`, { method: "POST" });
+  const json = await res.json();
+  if (!res.ok || !json.ok) {
+    throw new Error(json.error || `Set single lock target failed (${res.status})`);
+  }
+  return normalizeLockedTargetKeys(json.locked_target_keys || []);
+}
+
+async function postMpkFullRandomOverride(enabled) {
+  const params = new URLSearchParams();
+  params.set("enabled", enabled ? "true" : "false");
+  const res = await fetch(`/api/mpk/full-random-override?${params.toString()}`, { method: "POST" });
+  const json = await res.json();
+  if (!res.ok || !json.ok) {
+    throw new Error(json.error || `Full random override update failed (${res.status})`);
+  }
+  return json;
+}
+
+async function postSkipMpkWeakLock() {
+  const res = await fetch("/api/mpk/weak-lock/skip", { method: "POST" });
+  const json = await res.json();
+  if (!res.ok || !json.ok) {
+    throw new Error(json.error || `Skip weak lock failed (${res.status})`);
+  }
+  return json;
+}
+
 async function toggleMpkHeatmapLock(targetKey, nextLocked) {
   if (!targetKey || lockRequestInFlight) return;
   lockRequestInFlight = true;
@@ -376,6 +568,81 @@ async function toggleMpkHeatmapLock(targetKey, nextLocked) {
   } finally {
     lockRequestInFlight = false;
     updateMpkLockControls(lastPayload?.practice_next || {});
+  }
+}
+
+const MPK_SCHEDULER_THRESHOLD_NOOKS = [
+  { threshold: 25, range: "25% to <50%", behavior: "Fill 90%, Weak 10%, Maintain 0%" },
+  { threshold: 50, range: "50% to <80%", behavior: "Fill 50%, Weak 30%, Maintain 20%" },
+  { threshold: 80, range: "80% to <95%", behavior: "Fill 30%, Weak 50%, Maintain 20%" },
+  { threshold: 95, range: "95% to 100%", behavior: "Fill 10%, Weak 50%, Maintain 40%" },
+];
+
+function clearPracticeThresholdNooks() {
+  const nooks = document.getElementById("practiceDataThresholds");
+  if (!nooks) return;
+  nooks.innerHTML = "";
+}
+
+function ensureThresholdTooltip() {
+  if (thresholdTooltipEl && document.body.contains(thresholdTooltipEl)) {
+    return thresholdTooltipEl;
+  }
+  const node = document.createElement("div");
+  node.id = "practiceThresholdTooltip";
+  node.className = "practice-threshold-tooltip";
+  document.body.appendChild(node);
+  thresholdTooltipEl = node;
+  return node;
+}
+
+function hideThresholdTooltip() {
+  const tip = ensureThresholdTooltip();
+  tip.classList.remove("is-visible");
+}
+
+function showThresholdTooltip(text, clientX, clientY) {
+  const tip = ensureThresholdTooltip();
+  tip.textContent = text;
+  tip.classList.add("is-visible");
+  const margin = 14;
+  const maxLeft = Math.max(8, window.innerWidth - tip.offsetWidth - 8);
+  const maxTop = Math.max(8, window.innerHeight - tip.offsetHeight - 8);
+  const left = Math.min(maxLeft, Math.max(8, clientX + margin));
+  const top = Math.min(maxTop, Math.max(8, clientY + margin));
+  tip.style.left = `${left}px`;
+  tip.style.top = `${top}px`;
+}
+
+function bindThresholdTooltip(node, text) {
+  if (!node) return;
+  node.addEventListener("mouseenter", (event) => {
+    showThresholdTooltip(text, event.clientX, event.clientY);
+  });
+  node.addEventListener("mousemove", (event) => {
+    showThresholdTooltip(text, event.clientX, event.clientY);
+  });
+  node.addEventListener("mouseleave", () => {
+    hideThresholdTooltip();
+  });
+}
+
+function renderPracticeThresholdNooks(progressPct, isMpkSource) {
+  const nooks = document.getElementById("practiceDataThresholds");
+  if (!nooks) return;
+  nooks.innerHTML = "";
+  if (!isMpkSource) return;
+  for (const row of MPK_SCHEDULER_THRESHOLD_NOOKS) {
+    const node = document.createElement("span");
+    const threshold = Number(row.threshold || 0);
+    node.className = `practice-threshold-nook${progressPct >= threshold ? " is-active" : ""}`;
+    node.style.left = `${threshold}%`;
+    const tooltipText =
+      `Sample coverage >= ${threshold}%\n` +
+      `Range: ${row.range}\n` +
+      `Scheduler: ${row.behavior}`;
+    bindThresholdTooltip(node, tooltipText);
+    nooks.appendChild(node);
   }
 }
 
@@ -413,6 +680,7 @@ function renderPracticeNext(payload) {
     }
     const progressBar = document.getElementById("practiceDataProgressBar");
     if (progressBar) progressBar.style.width = "0%";
+    clearPracticeThresholdNooks();
     const progressTextNode = document.getElementById("practiceDataProgressText");
     if (progressTextNode) progressTextNode.textContent = "";
     currentPracticeCommand = "";
@@ -428,24 +696,50 @@ function renderPracticeNext(payload) {
   const qualifiedTargets = Number(distribution.qualified_targets || 0);
   const totalTargets = Number(distribution.total_targets || 0);
   const minPointsPerTarget = Number(distribution.min_points_per_target || 3);
+  const modeCoverage = Number(distribution.mode_coverage_percent || 0);
+  const modeQualified = Number(distribution.mode_qualified_targets || 0);
+  const modeTotal = Number(distribution.mode_total_targets || totalTargets);
+  const modeMinSamples = Number(distribution.min_points_per_target || 2);
+  const progressCoveragePct = widget.source === "mpk" ? modeCoverage : coveragePct;
   if (progressBar) {
-    const widthPct = Math.max(0, Math.min(100, coveragePct));
+    const widthPct = Math.max(0, Math.min(100, progressCoveragePct));
     progressBar.style.width = `${widthPct}%`;
   }
+  renderPracticeThresholdNooks(progressCoveragePct, widget.source === "mpk");
   if (progressTextNode) {
     if (widget.source === "mpk") {
       const eligibleTargets = Number(distribution.eligible_targets || totalTargets);
       const seedTargets = Number(distribution.seed_targets || totalTargets);
-      const modeCoverage = Number(distribution.mode_coverage_percent || 0);
-      const modeQualified = Number(distribution.mode_qualified_targets || 0);
-      const modeTotal = Number(distribution.mode_total_targets || totalTargets);
-      const modeMinSamples = Number(distribution.min_points_per_target || 2);
       progressTextNode.textContent =
-        `MPK attempted: ${coveragePct.toFixed(2)}% (${qualifiedTargets}/${totalTargets}); sample coverage (>=${modeMinSamples}): ${modeCoverage.toFixed(2)}% (${modeQualified}/${modeTotal}); eligible by leniency: ${eligibleTargets}/${seedTargets}.`;
+        `Sample coverage (>=${modeMinSamples} attempts/target): ${modeCoverage.toFixed(2)}% (${modeQualified}/${modeTotal}); MPK attempted (any samples): ${coveragePct.toFixed(2)}% (${qualifiedTargets}/${totalTargets}); eligible by leniency: ${eligibleTargets}/${seedTargets}.`;
     } else {
       progressTextNode.textContent =
         `Data coverage (last ${windowSize}): ${coveragePct.toFixed(2)}% (${qualifiedTargets}/${totalTargets} targets with >=${minPointsPerTarget} attempts). Need ${thresholdPct.toFixed(0)}%.`;
     }
+  }
+  if (widget.source === "mpk" && !!widget.full_random_override_enabled) {
+    if (commandRow) commandRow.style.display = "none";
+    if (soundBtn) soundBtn.style.display = "none";
+    setText("practiceCurrentHeading", "Current (full random)");
+    setText("practiceNextHeading", "Next (full random)");
+    setHtml("practiceCurrentLeniency", "");
+    setHtml("practiceNextLeniency", "");
+    setText("practiceCurrentMain", "Random MPK seed");
+    setText("practiceCurrentStats", "Scheduler paused. Forced seed injection disabled.");
+    setText("practiceCurrentReason", "");
+    setText("practiceNextMain", "Random MPK seed");
+    setText("practiceNextStats", "Atum seed is cleared and left empty while override is enabled.");
+    setText("practiceNextReason", "");
+    setText("practiceNextMeta", "Disable Full Random to resume normal scheduling and seed injection.");
+    setText("practiceNextCommand", "");
+    currentPracticeCommand = "";
+    if (copyBtn) {
+      copyBtn.disabled = true;
+      copyBtn.textContent = "Copy";
+    }
+    lastWeakLockState = { lockActive: false, targetKey: "", streak: 0, minStreak: 3 };
+    updateMpkLockControls(widget);
+    return;
   }
   if (!rec) {
     if (commandRow) commandRow.style.display = widget.source === "mpk" ? "none" : "";
@@ -1371,6 +1665,16 @@ function renderAttemptTable(rows) {
       Number.isNaN(Number(row.standing_height))
         ? "-"
         : `Y${Number(row.standing_height)}`;
+    const relativeStartedAt = formatRelativeDateTime(row.started_at_utc);
+    const fullStartedAt = escapeHtmlAttr(formatDateTime(row.started_at_utc));
+    const retryTargetKey = String(row.retry_target_key || "").trim();
+    const canRetry =
+      String(row.attempt_source || "").toLowerCase() === "mpk" && retryTargetKey.startsWith("mpk|");
+    const retryCell = canRetry
+      ? `<button type="button" class="attempt-retry-btn" data-target-key="${escapeHtmlAttr(retryTargetKey)}"${
+          lockRequestInFlight ? " disabled" : ""
+        }>Retry</button>`
+      : "-";
     const tr = document.createElement("tr");
     const tooltipParts = [];
     if (crossbowShots > 0 || bowShots > 0) {
@@ -1392,7 +1696,7 @@ function renderAttemptTable(rows) {
     tr.title = tooltipParts.join(" | ");
     tr.innerHTML = `
       <td>${row.id}</td>
-      <td>${formatDateTime(row.started_at_utc)}</td>
+      <td title="${fullStartedAt}">${relativeStartedAt}</td>
       <td>${String(row.attempt_source || "practice").toUpperCase()}</td>
       <td class="status-${row.status}">${statusLabel}</td>
       <td>${row.tower_name || "Unknown"}</td>
@@ -1404,8 +1708,32 @@ function renderAttemptTable(rows) {
       <td>${row.total_damage}</td>
       <td>${rotExpl}</td>
       <td>${formatSec(row.success_time_seconds)}</td>
+      <td>${retryCell}</td>
     `;
     tbody.appendChild(tr);
+    if (canRetry) {
+      const retryBtn = tr.querySelector(".attempt-retry-btn");
+      if (retryBtn) {
+        retryBtn.addEventListener("click", async () => {
+          if (lockRequestInFlight) return;
+          const targetKey = String(retryBtn.getAttribute("data-target-key") || "").trim();
+          if (!targetKey) return;
+          lockRequestInFlight = true;
+          retryBtn.disabled = true;
+          retryBtn.textContent = "Locking...";
+          updateMpkLockControls(lastPayload?.practice_next || {});
+          try {
+            lockedMpkTargets = await postSetSingleMpkLock(targetKey);
+            await refresh("full");
+          } catch (error) {
+            console.error("Failed to set retry lock target:", error);
+          } finally {
+            lockRequestInFlight = false;
+            updateMpkLockControls(lastPayload?.practice_next || {});
+          }
+        });
+      }
+    }
   }
 }
 
@@ -1426,6 +1754,18 @@ function renderPayload(payload) {
   const includeToggle = document.getElementById("includeOneEight");
   if (includeToggle) {
     includeToggle.checked = includeOneEight;
+  }
+  const seedModeSelect = document.getElementById("seedModeFilter");
+  if (seedModeSelect) {
+    const valid = ["all", "full_random", "set_seed"];
+    const incoming = String(payload.selected_attempt_seed_mode || selectedSeedMode || "all").toLowerCase();
+    if (valid.includes(incoming)) {
+      selectedSeedMode = incoming;
+    }
+    if (!valid.includes(selectedSeedMode)) {
+      selectedSeedMode = "all";
+    }
+    seedModeSelect.value = selectedSeedMode;
   }
   const rotationSelect = document.getElementById("rotationFilter");
   if (rotationSelect) {
@@ -1616,6 +1956,7 @@ function buildDashboardUrl(detail = "full") {
   params.set("include_1_8", includeOneEight ? "true" : "false");
   params.set("rotation", selectedRotation);
   params.set("window", selectedWindow);
+  params.set("seed_mode", selectedSeedMode);
   if (selectedLeniencyTarget !== null && !Number.isNaN(Number(selectedLeniencyTarget))) {
     params.set("leniency_target", String(selectedLeniencyTarget));
   }
@@ -1628,13 +1969,32 @@ function buildDashboardUrl(detail = "full") {
   return `/api/dashboard?${params.toString()}`;
 }
 
+async function persistLeniencyTarget(value) {
+  const numeric = Number(value);
+  const normalized = Number.isNaN(numeric) ? 0 : numeric;
+  const params = new URLSearchParams();
+  params.set("value", String(normalized));
+  const res = await fetch(`/api/mpk/leniency-target?${params.toString()}`, { method: "POST" });
+  if (!res.ok) {
+    throw new Error(`Failed to save leniency target (${res.status})`);
+  }
+  return res.json();
+}
+
 async function refresh(detail = "full") {
+  const requestSeq = ++refreshRequestSeq;
   try {
     const [healthRes, dashboardRes] = await Promise.all([fetch("/api/health"), fetch(buildDashboardUrl(detail))]);
+    if (requestSeq !== refreshRequestSeq) {
+      return;
+    }
     const health = await healthRes.json();
     lastHealth = health;
     renderMpkSetupCard(health);
     const payload = await dashboardRes.json();
+    if (requestSeq !== refreshRequestSeq) {
+      return;
+    }
 
     renderPayload(payload);
 
@@ -1650,6 +2010,9 @@ async function refresh(detail = "full") {
       `Updated ${new Date(payload.server_time_utc).toLocaleTimeString()} | Watching: ${watchLabel}`
     );
   } catch (error) {
+    if (requestSeq !== refreshRequestSeq) {
+      return;
+    }
     setText("lastUpdated", `Dashboard fetch error: ${error}`);
     const healthDot = document.getElementById("healthDot");
     const healthText = document.getElementById("healthText");
@@ -1711,6 +2074,16 @@ if (windowFilter) {
   });
 }
 
+const seedModeFilter = document.getElementById("seedModeFilter");
+if (seedModeFilter) {
+  seedModeFilter.addEventListener("change", (event) => {
+    selectedSeedMode = String(event.target.value || "all");
+    selectedTower = "__GLOBAL__";
+    selectedSide = "__GLOBAL__";
+    refresh("full");
+  });
+}
+
 const includeOneEightToggle = document.getElementById("includeOneEight");
 if (includeOneEightToggle) {
   includeOneEightToggle.addEventListener("change", (event) => {
@@ -1738,6 +2111,9 @@ if (mpkSetupForm) {
     const input = document.getElementById("mpkInstancePathInput");
     const status = document.getElementById("mpkSetupStatus");
     const saveBtn = document.getElementById("mpkSetupSaveBtn");
+    const legalToggle = document.getElementById("mpkLegalRankedToggle");
+    const recipeToggle = document.getElementById("mpkInjectRecipeBookToggle");
+    const dragonPatchToggle = document.getElementById("mpkInjectDragonPatchToggle");
     if (!input || !status) return;
     const path = String(input.value || "").trim();
     if (!path) {
@@ -1750,7 +2126,12 @@ if (mpkSetupForm) {
       const res = await fetch("/api/setup/mpk-instance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path }),
+        body: JSON.stringify({
+          path,
+          legal_ranked_instance: !!(legalToggle ? legalToggle.checked : false),
+          open_recipe_book_on_run_start: !!(recipeToggle ? recipeToggle.checked : true),
+          enable_dragon_node_patch: !!(dragonPatchToggle ? dragonPatchToggle.checked : true),
+        }),
       });
       const json = await res.json();
       if (!res.ok || !json.ok) {
@@ -1765,6 +2146,13 @@ if (mpkSetupForm) {
     } finally {
       if (saveBtn) saveBtn.disabled = false;
     }
+  });
+}
+
+const mpkLegalRankedToggle = document.getElementById("mpkLegalRankedToggle");
+if (mpkLegalRankedToggle) {
+  mpkLegalRankedToggle.addEventListener("change", () => {
+    syncMpkLegalToggleState();
   });
 }
 
@@ -1804,19 +2192,30 @@ if (leniencyTargetInput) {
       clearTimeout(leniencyRefreshTimer);
       leniencyRefreshTimer = null;
     }
-    if (immediate) {
+    const run = async () => {
+      try {
+        await persistLeniencyTarget(selectedLeniencyTarget);
+      } catch (error) {
+        console.error("Failed to persist leniency target:", error);
+      }
       refresh("full");
+    };
+    if (immediate) {
+      run();
       return;
     }
     leniencyRefreshTimer = setTimeout(() => {
       leniencyRefreshTimer = null;
-      refresh("full");
+      run();
     }, 220);
   };
   leniencyTargetInput.addEventListener("input", (event) => {
     applyLeniencyAndRefresh(event.target.value, false);
   });
   leniencyTargetInput.addEventListener("change", (event) => {
+    applyLeniencyAndRefresh(event.target.value, true);
+  });
+  leniencyTargetInput.addEventListener("blur", (event) => {
     applyLeniencyAndRefresh(event.target.value, true);
   });
 }
@@ -1875,6 +2274,44 @@ if (clearMpkLocksBtn) {
       console.error("Failed to clear MPK lock list:", error);
     } finally {
       lockRequestInFlight = false;
+      updateMpkLockControls(lastPayload?.practice_next || {});
+    }
+  });
+}
+
+const fullRandomOverrideBtn = document.getElementById("fullRandomOverrideBtn");
+if (fullRandomOverrideBtn) {
+  fullRandomOverrideBtn.addEventListener("click", async () => {
+    if (fullRandomOverrideRequestInFlight) return;
+    const widget = lastPayload?.practice_next || {};
+    const currentlyEnabled = !!widget.full_random_override_enabled;
+    fullRandomOverrideRequestInFlight = true;
+    updateMpkLockControls(widget);
+    try {
+      await postMpkFullRandomOverride(!currentlyEnabled);
+      await refresh("full");
+    } catch (error) {
+      console.error("Failed to update full random override:", error);
+    } finally {
+      fullRandomOverrideRequestInFlight = false;
+      updateMpkLockControls(lastPayload?.practice_next || {});
+    }
+  });
+}
+
+const skipWeakLockBtn = document.getElementById("skipWeakLockBtn");
+if (skipWeakLockBtn) {
+  skipWeakLockBtn.addEventListener("click", async () => {
+    if (weakLockSkipRequestInFlight) return;
+    weakLockSkipRequestInFlight = true;
+    updateMpkLockControls(lastPayload?.practice_next || {});
+    try {
+      await postSkipMpkWeakLock();
+      await refresh("full");
+    } catch (error) {
+      console.error("Failed to skip weak lock:", error);
+    } finally {
+      weakLockSkipRequestInFlight = false;
       updateMpkLockControls(lastPayload?.practice_next || {});
     }
   });

@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "ranked_dragon_node_patch",
+  "version": "${version}",
+  "name": "Ranked Dragon Node Patch",
+  "description": "Limits Ender Dragon nearest path node search to indices 0-15 for more consistent zero-cycle node behavior.",
+  "authors": [
+    "Boyen"
+  ],
+  "contact": {},
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "dev.boyen.dragonnodepatch.DragonNodePatchMod"
+    ]
+  },
+  "mixins": [
+    "ranked-dragon-node-patch.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.12.0",
+    "minecraft": "1.16.1"
+  }
+}

@@ -23,6 +23,7 @@ WINDOW_START_UTC_CTX: ContextVar[str | None] = ContextVar("window_start_utc", de
 INCLUDE_STRAIGHT_CTX: ContextVar[bool] = ContextVar("include_straight", default=True)
 ROTATION_FILTER_CTX: ContextVar[str] = ContextVar("rotation_filter", default="both")
 ATTEMPT_SOURCE_CTX: ContextVar[str] = ContextVar("attempt_source_filter", default="mpk")
+ATTEMPT_SEED_MODE_CTX: ContextVar[str] = ContextVar("attempt_seed_mode_filter", default="all")
 MPK_LENIENCY_TARGET_CTX: ContextVar[float] = ContextVar("mpk_leniency_target", default=0.0)
 
 _MPK_EXPECTED_TOWERS = [
@@ -62,12 +63,14 @@ _MPK_HEATMAP_MIN_LEVEL = 48
 _MPK_HEATMAP_MAX_LEVEL = 60
 _MPK_MIN_SAMPLES_PER_TARGET = 2
 _MPK_WEAK_MIN_STREAK_TO_SWAP = 3
+_MPK_WEAK_RANDOM_POOL_SIZE = 5
 _MPK_MODE_CURSOR_KEY = "mpk.practice.mode_cursor"
 _MPK_RECENT_TARGETS_KEY = "mpk.practice.recent_targets"
 _MPK_LAST_MODE_KEY = "mpk.practice.last_mode"
 _MPK_WEAK_LOCK_TARGET_KEY = "mpk.practice.weak_lock_target_key"
 _MPK_WEAK_LOCK_ANCHOR_ATTEMPT_ID_KEY = "mpk.practice.weak_lock_anchor_attempt_id"
 _MPK_LOCKED_TARGETS_KEY = "mpk.practice.locked_targets"
+_MPK_FULL_RANDOM_OVERRIDE_KEY = "mpk.practice.full_random_override"
 _MPK_SEED_MAP_CACHE_PATH: Path | None = None
 _MPK_SEED_MAP_CACHE_MTIME: float | None = None
 _MPK_SEED_MAP_CACHE: dict[tuple[str, str, int], list[int]] | None = None
@@ -391,6 +394,70 @@ def _write_mpk_seed_to_atum_json_for_path(path: Path, seed_value: int) -> str | 
         return f"Failed writing atum.json: {exc}"
 
 
+def _clear_mpk_seed_in_atum_json_for_path(path: Path) -> str | None:
+    try:
+        if not path.exists():
+            return f"Missing atum.json: {path}"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return f"Invalid atum.json payload: {path}"
+        data["seed"] = ""
+        rendered = json.dumps(data, indent=2, ensure_ascii=True) + "\n"
+        path.write_text(rendered, encoding="utf-8")
+        return None
+    except Exception as exc:
+        return f"Failed clearing atum.json seed: {exc}"
+
+
+def is_mpk_full_random_override_enabled(db: Database) -> bool:
+    raw = (db.get_state(_MPK_FULL_RANDOM_OVERRIDE_KEY, "0") or "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def clear_runtime_atum_seed(db: Database) -> dict[str, Any]:
+    atum_json_path = _resolve_runtime_atum_json_path(db)
+    if atum_json_path is None:
+        return {
+            "ok": False,
+            "seed_cleared": False,
+            "seed_clear_error": "No configured MPK instance path.",
+            "atum_json_path": "",
+        }
+    clear_error = _clear_mpk_seed_in_atum_json_for_path(atum_json_path)
+    return {
+        "ok": clear_error is None,
+        "seed_cleared": clear_error is None,
+        "seed_clear_error": clear_error,
+        "atum_json_path": str(atum_json_path),
+    }
+
+
+def set_mpk_full_random_override(db: Database, enabled: bool) -> dict[str, Any]:
+    enabled_norm = bool(enabled)
+    db.set_state(_MPK_FULL_RANDOM_OVERRIDE_KEY, "1" if enabled_norm else "0")
+    if enabled_norm:
+        # Clear queued forced-seed target state while override is active.
+        db.set_state("mpk.practice.target_key", "")
+        db.set_state("mpk.practice.seed_value", "")
+        db.set_state("mpk.practice.next_selection_reason", "full_random_override")
+        db.set_state("mpk.practice.next_selection_mode", "full_random_override")
+        db.set_state("mpk.practice.next_requested_mode", "full_random_override")
+        db.set_state("mpk.practice.next_seed_mode", "full_random")
+        seed_status = clear_runtime_atum_seed(db)
+    else:
+        db.set_state("mpk.practice.next_seed_mode", "set_seed")
+        seed_status = {
+            "ok": True,
+            "seed_cleared": False,
+            "seed_clear_error": None,
+            "atum_json_path": str(_resolve_runtime_atum_json_path(db) or ""),
+        }
+    return {
+        "enabled": enabled_norm,
+        **seed_status,
+    }
+
+
 def parse_mpk_target_key(target_key: str) -> tuple[str, str, int] | None:
     parts = str(target_key or "").split("|", 3)
     if len(parts) != 4 or parts[0] != "mpk":
@@ -514,6 +581,7 @@ def _mpk_selection_reason_label(reason: str) -> str:
         "mode": "mode strategy",
         "mode_fallback": "mode fallback",
         "weak_lock": "weak lock (streak)",
+        "weak_lock_skipped": "weak lock skipped",
     }
     return mapping.get(key, "targeted")
 
@@ -563,6 +631,28 @@ def _mpk_success_streak_for_target(db: Database, target_key: str, *, anchor_afte
         else:
             break
     return streak
+
+
+def skip_current_mpk_weak_lock(db: Database) -> dict[str, Any]:
+    lock_key = db.get_state(_MPK_WEAK_LOCK_TARGET_KEY, "") or ""
+    had_lock = bool(lock_key)
+    db.set_state(_MPK_WEAK_LOCK_TARGET_KEY, "")
+    db.set_state(_MPK_WEAK_LOCK_ANCHOR_ATTEMPT_ID_KEY, "0")
+    queued_key = db.get_state("mpk.practice.target_key", "") or ""
+    if lock_key and queued_key == lock_key:
+        db.set_state("mpk.practice.target_key", "")
+        db.set_state("mpk.practice.seed_value", "")
+        db.set_state("mpk.practice.next_selection_reason", "weak_lock_skipped")
+        db.set_state("mpk.practice.next_selection_mode", "")
+        db.set_state("mpk.practice.next_requested_mode", "")
+    if lock_key:
+        history = _load_recent_mpk_targets(db, max_items=5)
+        history.append(lock_key)
+        _store_recent_mpk_targets(db, history, max_items=5)
+    return {
+        "had_lock": had_lock,
+        "skipped_target_key": lock_key,
+    }
 
 
 def rotate_mpk_seed_for_target_key(
@@ -820,6 +910,24 @@ def _pick_fill_candidate(
     return random.choice(candidate_pool)
 
 
+def _pick_weak_candidate(
+    bucket: list[dict[str, Any]],
+    recent_keys: set[str],
+    *,
+    advance_mode: bool,
+) -> dict[str, Any] | None:
+    if not bucket:
+        return None
+    pool_size = max(1, min(_MPK_WEAK_RANDOM_POOL_SIZE, len(bucket)))
+    weakest_pool = bucket[:pool_size]
+    non_recent = [row for row in weakest_pool if str(row.get("target_key", "")) not in recent_keys]
+    candidate_pool = non_recent or weakest_pool
+    if not advance_mode:
+        # Keep preview deterministic when not advancing selection.
+        return candidate_pool[0]
+    return random.choice(candidate_pool)
+
+
 def _mode_for_candidate(candidate: dict[str, Any]) -> str:
     attempts = int(candidate.get("attempts", 0))
     if attempts < _MPK_MIN_SAMPLES_PER_TARGET:
@@ -958,6 +1066,8 @@ def _choose_mpk_target_with_modes(
         bucket = mode_to_bucket.get(candidate_mode, [])
         if candidate_mode == "fill":
             selected = _pick_fill_candidate(bucket, recent_keys, advance_mode=advance_mode)
+        elif candidate_mode == "weak":
+            selected = _pick_weak_candidate(bucket, recent_keys, advance_mode=advance_mode)
         else:
             selected = _pick_first_not_recent(bucket, recent_keys)
         if selected is not None:
@@ -1085,6 +1195,10 @@ def _scope_where(
     if attempt_source in {"practice", "mpk"}:
         clauses.append("COALESCE(attempt_source, 'practice') = ?")
         params.append(attempt_source)
+    attempt_seed_mode = ATTEMPT_SEED_MODE_CTX.get()
+    if attempt_seed_mode in {"full_random", "set_seed"}:
+        clauses.append("COALESCE(attempt_seed_mode, 'set_seed') = ?")
+        params.append(attempt_seed_mode)
 
     window_min_id = WINDOW_MIN_ID_CTX.get()
     if window_min_id is not None:
@@ -1216,6 +1330,7 @@ def _compute_window_bounds(db: Database) -> dict[str, dict[str, Any]]:
 
 def compute_mpk_practice_next_widget(db: Database) -> dict[str, Any]:
     leniency_target = _normalize_leniency_target(MPK_LENIENCY_TARGET_CTX.get())
+    full_random_override_enabled = is_mpk_full_random_override_enabled(db)
     prep = get_mpk_practice_candidates(db, leniency_target=leniency_target)
     seed_map = prep["seed_map"]
     map_levels = prep["map_levels"]
@@ -1239,6 +1354,8 @@ def compute_mpk_practice_next_widget(db: Database) -> dict[str, Any]:
             "disabled_reason": map_error or "No MPK seed map entries available.",
             "recommended": None,
             "window_size": 0,
+            "source": "mpk",
+            "full_random_override_enabled": full_random_override_enabled,
         }
 
     if not candidates:
@@ -1253,6 +1370,8 @@ def compute_mpk_practice_next_widget(db: Database) -> dict[str, Any]:
             "disabled_reason": " ".join(reasons),
             "recommended": None,
             "window_size": 0,
+            "source": "mpk",
+            "full_random_override_enabled": full_random_override_enabled,
         }
 
     pick = _choose_mpk_target_with_modes(
@@ -1267,6 +1386,8 @@ def compute_mpk_practice_next_widget(db: Database) -> dict[str, Any]:
             "disabled_reason": "No MPK target could be selected from candidate pool.",
             "recommended": None,
             "window_size": 0,
+            "source": "mpk",
+            "full_random_override_enabled": full_random_override_enabled,
         }
     recommended_raw = pick["candidate"]
     selection_reason = str(pick.get("selection_reason", "mode"))
@@ -1314,6 +1435,8 @@ def compute_mpk_practice_next_widget(db: Database) -> dict[str, Any]:
             "disabled_reason": "Invalid MPK target key while selecting recommendation.",
             "recommended": None,
             "window_size": 0,
+            "source": "mpk",
+            "full_random_override_enabled": full_random_override_enabled,
         }
     rec_key_tuple = parsed_key
     weak_status = _weak_status_for_target(rec_key) if selected_mode == "weak" else None
@@ -1322,16 +1445,31 @@ def compute_mpk_practice_next_widget(db: Database) -> dict[str, Any]:
         weak_status["remaining"] = max(
             0, int(min_streak_to_swap) - int(current_streak_on_recommended)
         )
-    seed_state = rotate_mpk_seed_for_target_key(db, rec_key, advance=False)
-    selected_seed_raw = seed_state.get("selected_seed")
-    selected_seed = int(selected_seed_raw) if selected_seed_raw is not None else None
-    seed_changed = bool(seed_state.get("seed_changed", False))
-    seed_apply_error = (
-        str(seed_state.get("seed_apply_error"))
-        if seed_state.get("seed_apply_error") is not None
-        else None
-    )
-    seed_pool_size = int(seed_state.get("seed_pool_size", 0))
+    if full_random_override_enabled:
+        seed_state = {
+            "selected_seed": None,
+            "seed_changed": False,
+            "seed_apply_error": None,
+            "seed_pool_size": 0,
+            "atum_json_path": str(_resolve_runtime_atum_json_path(db) or ""),
+            "map_levels": map_levels,
+            "map_error": map_error,
+        }
+        selected_seed = None
+        seed_changed = False
+        seed_apply_error = None
+        seed_pool_size = 0
+    else:
+        seed_state = rotate_mpk_seed_for_target_key(db, rec_key, advance=False)
+        selected_seed_raw = seed_state.get("selected_seed")
+        selected_seed = int(selected_seed_raw) if selected_seed_raw is not None else None
+        seed_changed = bool(seed_state.get("seed_changed", False))
+        seed_apply_error = (
+            str(seed_state.get("seed_apply_error"))
+            if seed_state.get("seed_apply_error") is not None
+            else None
+        )
+        seed_pool_size = int(seed_state.get("seed_pool_size", 0))
 
     attempted_targets = sum(1 for c in candidates if c["attempts"] > 0)
     coverage_pct = round(_pct(attempted_targets, total_targets), 2)
@@ -1356,7 +1494,7 @@ def compute_mpk_practice_next_widget(db: Database) -> dict[str, Any]:
         missing_groups = [*missing_groups[:max_groups], f"... +{hidden} more groups"]
 
     recommended = {
-        "target_kind": "mpk_zero",
+        "target_kind": "mpk_full_random_override" if full_random_override_enabled else "mpk_zero",
         "label": f"{rec_key_tuple[1]} {rec_key_tuple[0]} O{rec_key_tuple[2]}",
         "tower_name": rec_key_tuple[0],
         "side": rec_key_tuple[1],
@@ -1368,8 +1506,8 @@ def compute_mpk_practice_next_widget(db: Database) -> dict[str, Any]:
         "leniency": float(recommended_raw.get("leniency", 0.0)),
         "selection_reason": selection_reason,
         "selection_reason_label": _mpk_selection_reason_label(selection_reason),
-        "selection_mode": selected_mode,
-        "requested_mode": requested_mode,
+        "selection_mode": "full_random_override" if full_random_override_enabled else selected_mode,
+        "requested_mode": "full_random_override" if full_random_override_enabled else requested_mode,
         "selected_seed": str(selected_seed) if selected_seed is not None else "",
         "chat_command": str(selected_seed) if selected_seed is not None else "",
         "weak_streak": int(weak_status["streak"]) if weak_status is not None else None,
@@ -1470,11 +1608,12 @@ def compute_mpk_practice_next_widget(db: Database) -> dict[str, Any]:
         "missing_target_groups": missing_groups,
         "missing_1_8_groups": [],
         "source": "mpk",
-        "selection_reason": selection_reason,
-        "selection_mode": selected_mode,
-        "requested_mode": requested_mode,
+        "selection_reason": "full_random_override" if full_random_override_enabled else selection_reason,
+        "selection_mode": "full_random_override" if full_random_override_enabled else selected_mode,
+        "requested_mode": "full_random_override" if full_random_override_enabled else requested_mode,
         "weak_streak_status": weak_status,
         "leniency_target": leniency_target,
+        "full_random_override_enabled": full_random_override_enabled,
         "locked_target_keys": locked_targets,
         "locked_target_labels": locked_target_labels,
         "lock_list_active": len(locked_targets) > 0,
@@ -1760,6 +1899,7 @@ def build_dashboard_payload_selected(
     tower_name: str | None = None,
     front_back: str | None = None,
     attempt_source: str = "mpk",
+    attempt_seed_mode: str = "all",
     leniency_target: float = 0.0,
     detail: str = "full",
 ) -> dict[str, Any]:
@@ -1773,14 +1913,17 @@ def build_dashboard_payload_selected(
     if window not in {"all", "current_session", "last_10", "last_25", "last_50", "last_100"}:
         window = "all"
     attempt_source = "mpk"
+    attempt_seed_mode = (attempt_seed_mode or "all").strip().lower()
+    if attempt_seed_mode not in {"all", "full_random", "set_seed"}:
+        attempt_seed_mode = "all"
     leniency_target = _normalize_leniency_target(leniency_target)
 
     tok_straight = INCLUDE_STRAIGHT_CTX.set(include_1_8)
     tok_rotation = ROTATION_FILTER_CTX.set(rotation)
     tok_source = ATTEMPT_SOURCE_CTX.set(attempt_source)
+    tok_seed_mode = ATTEMPT_SEED_MODE_CTX.set(attempt_seed_mode)
     tok_leniency = MPK_LENIENCY_TARGET_CTX.set(leniency_target)
     try:
-        db.set_state("mpk.practice.leniency_target", str(leniency_target))
         bounds_by_window = _compute_window_bounds(db)
         bounds = bounds_by_window.get(window, {"min_id": None, "start_utc": None})
         tok_id = WINDOW_MIN_ID_CTX.set(bounds.get("min_id"))
@@ -1904,8 +2047,14 @@ def build_dashboard_payload_selected(
                 "selected_rotation": rotation,
                 "selected_include_1_8": include_1_8,
                 "selected_attempt_source": attempt_source,
+                "selected_attempt_seed_mode": attempt_seed_mode,
                 "selected_leniency_target": leniency_target,
                 "attempt_source_options": [{"key": "mpk", "label": "MPK Seeds"}],
+                "attempt_seed_mode_options": [
+                    {"key": "all", "label": "All Data"},
+                    {"key": "full_random", "label": "Full Random Only"},
+                    {"key": "set_seed", "label": "Set Seed Only"},
+                ],
                 "detail": detail,
                 "practice_next": compute_practice_next_widget(db),
             }
@@ -1917,6 +2066,7 @@ def build_dashboard_payload_selected(
         ROTATION_FILTER_CTX.reset(tok_rotation)
         INCLUDE_STRAIGHT_CTX.reset(tok_straight)
         ATTEMPT_SOURCE_CTX.reset(tok_source)
+        ATTEMPT_SEED_MODE_CTX.reset(tok_seed_mode)
         MPK_LENIENCY_TARGET_CTX.reset(tok_leniency)
 
 
@@ -2153,6 +2303,23 @@ def compute_recent_attempts(
         )
         zero_type_text = str(row["zero_type"] or "")
         is_1_8 = "Straight" in zero_type_text
+        side = (
+            "Front"
+            if zero_type_text.startswith("Front ")
+            else "Back"
+            if zero_type_text.startswith("Back ")
+            else "Unknown"
+        )
+        o_level = _safe_int(row["o_level"]) if row["o_level"] is not None else None
+        tower_name_value = str(row["tower_name"] or "Unknown")
+        retry_target_key = None
+        if (
+            str(row["attempt_source"] or "practice").lower() == "mpk"
+            and tower_name_value not in {"", "Unknown"}
+            and side in {"Front", "Back"}
+            and o_level is not None
+        ):
+            retry_target_key = f"mpk|{tower_name_value}|{side}|{o_level}"
         result.append(
             {
                 "id": _safe_int(row["id"]),
@@ -2165,7 +2332,7 @@ def compute_recent_attempts(
                 "ended_clock": row["ended_clock"],
                 "first_bed_seconds": round(_safe_float(row["first_bed_seconds"]), 2),
                 "success_time_seconds": round(_safe_float(row["success_time_seconds"]), 2),
-                "tower_name": row["tower_name"] or "Unknown",
+                "tower_name": tower_name_value,
                 "tower_code": row["tower_code"],
                 "zero_type": zero_type_text or "Unknown",
                 "is_1_8": is_1_8,
@@ -2185,7 +2352,8 @@ def compute_recent_attempts(
                 "total_damage": total_damage,
                 "major_hit_count": major_hit_count,
                 "major_damage_per_hit": round(major_damage_per_hit, 2),
-                "o_level": _safe_int(row["o_level"]) if row["o_level"] is not None else None,
+                "o_level": o_level,
+                "retry_target_key": retry_target_key,
                 "flyaway_detected": bool(_safe_int(row["flyaway_detected"])),
                 "flyaway_gt": _safe_int(row["flyaway_gt"]),
                 "flyaway_dragon_y": _safe_int(row["flyaway_dragon_y"])
@@ -2788,7 +2956,8 @@ def compute_o_level_heatmap(
         FROM attempts
         WHERE status IN ('success', 'fail')
           AND o_level IS NOT NULL
-          AND COALESCE(tower_name, 'Unknown') <> 'Unknown'{where}
+          AND COALESCE(tower_name, 'Unknown') <> 'Unknown'
+          AND COALESCE(zero_type, '') NOT LIKE '%Straight%'{where}
         GROUP BY COALESCE(tower_name, 'Unknown'), side, o_level
         ORDER BY side ASC, tower_name ASC, o_level ASC
         """,
@@ -2811,7 +2980,8 @@ def compute_o_level_heatmap(
         WHERE status IN ('success', 'fail')
           AND o_level IS NOT NULL
           AND standing_height IS NOT NULL
-          AND COALESCE(tower_name, 'Unknown') <> 'Unknown'{where}
+          AND COALESCE(tower_name, 'Unknown') <> 'Unknown'
+          AND COALESCE(zero_type, '') NOT LIKE '%Straight%'{where}
         GROUP BY COALESCE(tower_name, 'Unknown'), side, o_level, standing_height
         ORDER BY side ASC, tower_name ASC, o_level ASC, standing_height ASC
         """,

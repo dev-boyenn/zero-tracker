@@ -13,7 +13,12 @@ from scripts.parse_command_storage import (
     rotation_from_storage,
     run_metrics_from_storage,
 )
-from .metrics import rotate_mpk_seed_for_target_key, select_next_mpk_target
+from .metrics import (
+    clear_runtime_atum_seed,
+    is_mpk_full_random_override_enabled,
+    rotate_mpk_seed_for_target_key,
+    select_next_mpk_target,
+)
 
 from .database import Database
 from .log_parser import ParsedLogLine
@@ -55,10 +60,12 @@ class MpkAttemptTracker:
         self.state_last_world_key = "mpk.last_ingested_world"
         self.state_active_world_key = "mpk.active_world_name"
         self.last_seen_exit_event_id = 0
-        self.world_create_re = re.compile(r'^Creating "(?P<world>.+)" with seed "(?P<seed>[-\d]+)"\.\.\.$')
+        self.world_create_re = re.compile(
+            r'^Creating "(?P<world>.+)"(?: with seed "(?P<seed>[-\d]+)")?\.\.\.$'
+        )
         self.world_load_re = re.compile(r"^Attempting event world load at (?P<world>.+)$")
-        self.world_join_re = re.compile(r"^[^ ]+ joined the game$")
         self.world_save_chunks_re = re.compile(r"Saving chunks for level 'ServerLevel\[(?P<world>.+?)\]'/")
+        self.state_inworld_re = re.compile(r"^StateOutput State: inworld(?:,|$)")
         self.pending_world_name_for_seed_rotation: str | None = None
         self.pending_world_seed_for_seed_rotation: str | None = None
         self.last_rotated_world_name = self.db.get_state("mpk.seed_rotate.last_world", "") or ""
@@ -69,11 +76,16 @@ class MpkAttemptTracker:
         return
 
     def handle_log_event(self, event_id: int, parsed: ParsedLogLine) -> None:
+        body = (parsed.body or "").strip()
+        transition_world = self._world_name_from_transition_line(body)
+        # Language-agnostic ingest trigger: when a new world starts loading,
+        # ingest the previous active world first.
+        if transition_world and self.active_world_name and transition_world != self.active_world_name:
+            self._ingest_latest_world(event_id=event_id, clock_time=parsed.clock_time)
         self._update_active_world_from_log(parsed)
         self._handle_seed_rotation_on_run_start(parsed)
         if event_id <= self.last_seen_exit_event_id:
             return
-        body = (parsed.body or "").strip()
         if not body or not self._is_world_exit_line(body):
             return
         self.last_seen_exit_event_id = event_id
@@ -86,14 +98,15 @@ class MpkAttemptTracker:
         create_match = self.world_create_re.match(body)
         if create_match is not None:
             self.pending_world_name_for_seed_rotation = str(create_match.group("world"))
-            self.pending_world_seed_for_seed_rotation = str(create_match.group("seed"))
+            seed_group = create_match.group("seed")
+            self.pending_world_seed_for_seed_rotation = str(seed_group) if seed_group is not None else None
             return
         load_match = self.world_load_re.match(body)
         if load_match is not None:
             self.pending_world_name_for_seed_rotation = str(load_match.group("world"))
             # Seed is not present in this log line. Keep any captured seed if available.
             return
-        if self.world_join_re.match(body) is None:
+        if not self._is_seed_rotation_trigger_line(body):
             return
         world_name = self.pending_world_name_for_seed_rotation or self.active_world_name
         if not world_name:
@@ -124,6 +137,29 @@ class MpkAttemptTracker:
             "mpk.practice.current_requested_mode",
             self.db.get_state("mpk.practice.next_requested_mode", "") or "",
         )
+        self.db.set_state(
+            "mpk.practice.current_seed_mode",
+            self.db.get_state("mpk.practice.next_seed_mode", "") or "set_seed",
+        )
+        if is_mpk_full_random_override_enabled(self.db):
+            self.db.set_state("mpk.practice.target_key", "")
+            self.db.set_state("mpk.practice.seed_value", "")
+            self.db.set_state("mpk.practice.current_target_key", "")
+            self.db.set_state("mpk.practice.current_seed_value", "")
+            self.db.set_state("mpk.practice.current_selection_reason", "full_random_override")
+            self.db.set_state("mpk.practice.current_selection_mode", "full_random_override")
+            self.db.set_state("mpk.practice.current_requested_mode", "full_random_override")
+            self.db.set_state("mpk.practice.current_seed_mode", "full_random")
+            self.db.set_state("mpk.practice.next_selection_reason", "full_random_override")
+            self.db.set_state("mpk.practice.next_selection_mode", "full_random_override")
+            self.db.set_state("mpk.practice.next_requested_mode", "full_random_override")
+            self.db.set_state("mpk.practice.next_seed_mode", "full_random")
+            clear_state = clear_runtime_atum_seed(self.db)
+            clear_error = clear_state.get("seed_clear_error")
+            self.db.set_state("mpk.seed_rotate.last_error", str(clear_error or ""))
+            self.last_rotated_world_name = world_name
+            self.db.set_state("mpk.seed_rotate.last_world", world_name)
+            return
 
         try:
             leniency_target = float(self.db.get_state("mpk.practice.leniency_target", "0") or "0")
@@ -145,6 +181,7 @@ class MpkAttemptTracker:
         self.db.set_state("mpk.practice.next_selection_reason", str(pick.get("selection_reason", "")))
         self.db.set_state("mpk.practice.next_selection_mode", str(pick.get("mode", "")))
         self.db.set_state("mpk.practice.next_requested_mode", str(pick.get("requested_mode", "")))
+        self.db.set_state("mpk.practice.next_seed_mode", "set_seed")
         self.db.set_state("mpk.practice.next_mode_coverage_percent", str(pick.get("coverage_percent", 0.0)))
         self.db.set_state("mpk.practice.next_mode_qualified_targets", str(pick.get("qualified_targets", 0)))
         self.db.set_state("mpk.practice.next_mode_total_targets", str(pick.get("total_targets", 0)))
@@ -178,12 +215,32 @@ class MpkAttemptTracker:
         self.db.set_state("mpk.ingest.last_detail", detail)
 
     def _is_world_exit_line(self, body: str) -> bool:
-        lower = body.lower()
-        return (
-            "disconnecting from server" in lower
-            or "left the game" in lower
-            or lower == "stopping!"
-        )
+        # Language-agnostic / forced markers only.
+        if body == "Stopping!":
+            return True
+        if body.startswith("StateOutput State: waiting"):
+            return True
+        return False
+
+    def _world_name_from_transition_line(self, body: str) -> str | None:
+        if not body:
+            return None
+        match = self.world_load_re.match(body)
+        if match is not None:
+            return str(match.group("world"))
+        match = self.world_create_re.match(body)
+        if match is not None:
+            return str(match.group("world"))
+        return None
+
+    def _is_seed_rotation_trigger_line(self, body: str) -> bool:
+        # Do not rely on localized vanilla/system lines like "joined the game".
+        # These lines are emitted by mods and are stable in English.
+        if body.startswith("Loaded StandardSettings on World Join"):
+            return True
+        if self.state_inworld_re.match(body) is not None:
+            return True
+        return False
 
     def _find_latest_world(self) -> Path | None:
         if not self.saves_dir.exists():
@@ -411,6 +468,9 @@ class MpkAttemptTracker:
             top_y = int(metrics.get("end_entry_top_y", -1) or -1)
             if top_y >= 0:
                 o_level = top_y
+        attempt_seed_mode = (self.db.get_state("mpk.practice.current_seed_mode", "") or "").strip().lower()
+        if attempt_seed_mode not in {"full_random", "set_seed"}:
+            attempt_seed_mode = "full_random" if is_mpk_full_random_override_enabled(self.db) else "set_seed"
 
         attempt_id = self.db.execute(
             """
@@ -441,6 +501,7 @@ class MpkAttemptTracker:
                 setup_hit_count,
                 max_damage_single_bed,
                 attempt_source,
+                attempt_seed_mode,
                 o_level,
                 flyaway_detected,
                 flyaway_gt,
@@ -450,7 +511,7 @@ class MpkAttemptTracker:
                 world_name,
                 created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, 'mpk', ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, 'mpk', ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 event_id,
@@ -476,6 +537,7 @@ class MpkAttemptTracker:
                 major_damage_total,
                 major_hit_count,
                 max_damage_single,
+                attempt_seed_mode,
                 o_level,
                 1 if flyaway_detected else 0,
                 flyaway_gt,

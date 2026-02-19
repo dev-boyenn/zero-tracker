@@ -1,0 +1,50 @@
+plugins {
+    id "fabric-loom" version "$loom_version"
+    id "maven-publish"
+}
+
+version = "$mod_version+$target_version"
+group = "dev.boyen"
+
+base {
+    archivesName = archives_name
+}
+
+repositories {
+    maven { url "https://jitpack.io" }
+    mavenCentral()
+    flatDir { dirs "libs" }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:$minecraft_version"
+    mappings "dev.tildejustin:yarn:${minecraft_version}-build.$yarn_build:v2"
+    modImplementation "net.fabricmc:fabric-loader:$loader_version"
+}
+
+processResources {
+    inputs.property "version", version
+
+    filesMatching("fabric.mod.json") {
+        expand "version": version
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    it.options.encoding = "UTF-8"
+    it.options.release.set(8)
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+    withSourcesJar()
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+        }
+    }
+}
