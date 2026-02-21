@@ -24,6 +24,7 @@ from .metrics import (
     clear_runtime_atum_seed,
     compute_recent_attempts,
     is_mpk_full_random_override_enabled,
+    replace_current_mpk_weak_lock_with_open,
     skip_current_mpk_weak_lock,
     set_mpk_full_random_override,
 )
@@ -647,6 +648,90 @@ def recent_attempts(
         ATTEMPT_SOURCE_CTX.reset(tok)
 
 
+@app.get("/api/stronghold/recent")
+def recent_stronghold_runs(
+    request: Request,
+    limit: int = Query(default=25, ge=1, le=200),
+) -> dict[str, object]:
+    db: Database = request.app.state.db
+    rows = db.query_all(
+        """
+        SELECT
+            id,
+            started_at_utc,
+            ended_at_utc,
+            status,
+            tower_name,
+            zero_type,
+            world_name,
+            world_seed,
+            stronghold_eye_spy_gt,
+            stronghold_end_enter_gt,
+            stronghold_nav_ticks,
+            stronghold_nav_seconds,
+            stronghold_sample_count,
+            stronghold_rooms_entered,
+            stronghold_starter_ticks,
+            stronghold_starter_seconds
+        FROM attempts
+        WHERE COALESCE(attempt_source, 'practice') = 'mpk'
+          AND COALESCE(stronghold_sample_count, 0) > 0
+        ORDER BY id DESC
+        LIMIT ?
+        """,
+        (limit,),
+    )
+    return {"runs": [dict(row) for row in rows]}
+
+
+@app.get("/api/stronghold/attempt/{attempt_id}")
+def stronghold_attempt_detail(request: Request, attempt_id: int) -> dict[str, object]:
+    db: Database = request.app.state.db
+    row = db.query_one(
+        """
+        SELECT
+            id,
+            started_at_utc,
+            ended_at_utc,
+            status,
+            tower_name,
+            zero_type,
+            world_name,
+            world_seed,
+            stronghold_eye_spy_gt,
+            stronghold_end_enter_gt,
+            stronghold_nav_ticks,
+            stronghold_nav_seconds,
+            stronghold_sample_count,
+            stronghold_rooms_entered,
+            stronghold_starter_ticks,
+            stronghold_starter_seconds
+        FROM attempts
+        WHERE id = ?
+          AND COALESCE(attempt_source, 'practice') = 'mpk'
+        """,
+        (attempt_id,),
+    )
+    if row is None:
+        return {"ok": False, "error": "Attempt not found."}
+    samples = db.query_all(
+        """
+        SELECT
+            sample_index,
+            gt,
+            x,
+            y,
+            z,
+            dim
+        FROM stronghold_samples
+        WHERE attempt_id = ?
+        ORDER BY sample_index ASC
+        """,
+        (attempt_id,),
+    )
+    return {"ok": True, "attempt": dict(row), "samples": [dict(s) for s in samples]}
+
+
 @app.get("/api/mpk/lock-targets")
 def get_mpk_lock_targets(request: Request) -> dict[str, object]:
     db: Database = request.app.state.db
@@ -742,6 +827,19 @@ def skip_mpk_weak_lock_route(request: Request) -> dict[str, object]:
     with request.app.state.mpk_lock:
         result = skip_current_mpk_weak_lock(db)
         request.app.state.dashboard_cache = {}
+    return {"ok": True, **result}
+
+
+@app.post("/api/mpk/weak-lock/replace-with-open")
+def replace_mpk_weak_lock_with_open_route(request: Request) -> dict[str, object]:
+    db: Database = request.app.state.db
+    if not bool(getattr(request.app.state, "mpk_enabled", False)):
+        return {"ok": False, "error": "MPK tracking is disabled."}
+    with request.app.state.mpk_lock:
+        result = replace_current_mpk_weak_lock_with_open(db)
+        request.app.state.dashboard_cache = {}
+    if not bool(result.get("ok", False)):
+        return {"ok": False, **result}
     return {"ok": True, **result}
 
 

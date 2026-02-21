@@ -1,5 +1,6 @@
 # Self-heal setup in case load function didn't run in this world.
 function zdash_tracker:ensure
+function zdash_tracker:stronghold/tick
 
 # Start run on first live dragon tick.
 execute if entity @e[type=minecraft:ender_dragon,limit=1] unless score #active zdi matches 1 run function zdash_tracker:start_run

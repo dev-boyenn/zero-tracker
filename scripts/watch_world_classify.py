@@ -166,6 +166,19 @@ def main() -> int:
                             )
                         )
                         print(
+                            "  Stronghold Nav: "
+                            + " | ".join(
+                                [
+                                    f"eye_spy={metrics.get('stronghold_eye_spy_logged', False)}",
+                                    f"eye_gt={metrics.get('stronghold_eye_spy_gt', 0)}",
+                                    f"end_enter={metrics.get('stronghold_end_enter_logged', False)}",
+                                    f"end_gt={metrics.get('stronghold_end_enter_gt', 0)}",
+                                    f"nav_s={metrics.get('stronghold_nav_seconds', 0.0)}",
+                                    f"samples={metrics.get('stronghold_sample_count', 0)}",
+                                ]
+                            )
+                        )
+                        print(
                             "  Totals: "
                             + " | ".join(
                                 [

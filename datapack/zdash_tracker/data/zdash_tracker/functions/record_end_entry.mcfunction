@@ -6,11 +6,19 @@ scoreboard players set #entry_top_is_endstone zdi 0
 execute as @a[limit=1] in minecraft:the_end store result score #entry_player_y zdi run data get entity @s Pos[1] 1
 # For MPK O-level matching, scan fixed column x=102, z=0 (same reference used by seed tooling).
 execute as @a[limit=1] in minecraft:the_end at @s positioned 102 ~ 0 run function zdash_tracker:scan_entry_column
+execute as @a[limit=1] in minecraft:the_end store result score #entry_start_beds zdi run clear @s minecraft:white_bed 0
+execute as @a[limit=1] in minecraft:the_end store result score #entry_start_anchors zdi run clear @s minecraft:respawn_anchor 0
+execute as @a[limit=1] in minecraft:the_end store result score #entry_start_bow zdi run clear @s minecraft:bow 0
+execute as @a[limit=1] in minecraft:the_end store result score #entry_start_xbow zdi run clear @s minecraft:crossbow 0
 
-data modify storage zdash:tracker run.end_entry set value {logged:0b,gt:0L,player_y:0,top_y:-1,top_is_endstone:0b}
+data modify storage zdash:tracker run.end_entry set value {logged:0b,gt:0L,player_y:0,top_y:-1,top_is_endstone:0b,start_white_beds:0,start_anchors:0,start_bow:0,start_crossbow:0}
 execute store result storage zdash:tracker run.end_entry.gt long 1 run time query gametime
 execute store result storage zdash:tracker run.end_entry.player_y int 1 run scoreboard players get #entry_player_y zdi
 execute store result storage zdash:tracker run.end_entry.top_y int 1 run scoreboard players get #entry_top_y zdi
+execute store result storage zdash:tracker run.end_entry.start_white_beds int 1 run scoreboard players get #entry_start_beds zdi
+execute store result storage zdash:tracker run.end_entry.start_anchors int 1 run scoreboard players get #entry_start_anchors zdi
+execute store result storage zdash:tracker run.end_entry.start_bow int 1 run scoreboard players get #entry_start_bow zdi
+execute store result storage zdash:tracker run.end_entry.start_crossbow int 1 run scoreboard players get #entry_start_xbow zdi
 execute if score #entry_top_is_endstone zdi matches 1 run data modify storage zdash:tracker run.end_entry.top_is_endstone set value 1b
 execute unless score #entry_top_is_endstone zdi matches 1 run data modify storage zdash:tracker run.end_entry.top_is_endstone set value 0b
 

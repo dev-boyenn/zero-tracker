@@ -1,6 +1,7 @@
 scoreboard objectives add zdi dummy
 scoreboard objectives add zubow minecraft.used:minecraft.bow
 scoreboard objectives add zuxbow minecraft.used:minecraft.crossbow
+scoreboard objectives add zueye minecraft.used:minecraft.ender_eye
 scoreboard objectives add zukill minecraft.killed:minecraft.ender_dragon
 
 execute unless score #active zdi matches -2147483648..2147483647 run scoreboard players set #active zdi 0
@@ -29,6 +30,10 @@ execute unless score #end_entry_logged zdi matches -2147483648..2147483647 run s
 execute unless score #entry_player_y zdi matches -2147483648..2147483647 run scoreboard players set #entry_player_y zdi 0
 execute unless score #entry_top_y zdi matches -2147483648..2147483647 run scoreboard players set #entry_top_y zdi -1
 execute unless score #entry_top_is_endstone zdi matches -2147483648..2147483647 run scoreboard players set #entry_top_is_endstone zdi 0
+execute unless score #entry_start_beds zdi matches -2147483648..2147483647 run scoreboard players set #entry_start_beds zdi 0
+execute unless score #entry_start_anchors zdi matches -2147483648..2147483647 run scoreboard players set #entry_start_anchors zdi 0
+execute unless score #entry_start_bow zdi matches -2147483648..2147483647 run scoreboard players set #entry_start_bow zdi 0
+execute unless score #entry_start_xbow zdi matches -2147483648..2147483647 run scoreboard players set #entry_start_xbow zdi 0
 execute unless score #explode_beds zdi matches -2147483648..2147483647 run scoreboard players set #explode_beds zdi 0
 execute unless score #explode_anchors zdi matches -2147483648..2147483647 run scoreboard players set #explode_anchors zdi 0
 execute unless score #explode_total zdi matches -2147483648..2147483647 run scoreboard players set #explode_total zdi 0
@@ -63,10 +68,18 @@ execute unless score #fly_since_end zdi matches -2147483648..2147483647 run scor
 execute unless score #fly_crystals_alive zdi matches -2147483648..2147483647 run scoreboard players set #fly_crystals_alive zdi 0
 execute unless score #fly_within2 zdi matches -2147483648..2147483647 run scoreboard players set #fly_within2 zdi 100
 execute unless score #fly_away2 zdi matches -2147483648..2147483647 run scoreboard players set #fly_away2 zdi 600
+execute unless score #sh_active zdi matches -2147483648..2147483647 run scoreboard players set #sh_active zdi 0
+execute unless score #sh_tick zdi matches -2147483648..2147483647 run scoreboard players set #sh_tick zdi 0
+execute unless score #sh_dim zdi matches -2147483648..2147483647 run scoreboard players set #sh_dim zdi 0
+execute unless score #sh_now_gt zdi matches -2147483648..2147483647 run scoreboard players set #sh_now_gt zdi 0
+execute unless score #sh_prev_gt zdi matches -2147483648..2147483647 run scoreboard players set #sh_prev_gt zdi 0
+execute unless score #eye_start zdi matches -2147483648..2147483647 run scoreboard players set #eye_start zdi 0
+execute unless score #eye_now zdi matches -2147483648..2147483647 run scoreboard players set #eye_now zdi 0
+execute unless score #eye_delta zdi matches -2147483648..2147483647 run scoreboard players set #eye_delta zdi 0
 
 execute unless data storage zdash:tracker meta run data modify storage zdash:tracker meta set value {scale:1000}
-execute unless data storage zdash:tracker meta.version run data modify storage zdash:tracker meta.version set value "v2026-02-17-flyaway3"
-execute unless data storage zdash:tracker run run data modify storage zdash:tracker run set value {active:0b,start_gt:0L,end_gt:0L,dragon_died:0b,dragon_died_gt:0L,flyaway:{armed:0b,detected:0b,node:"",node_code:0,detected_gt:0L,dragon_x:0,dragon_y:0,dragon_z:0,detected_dist2:0,crystals_alive:-1},deltas:{beds_exploded:0,anchors_interactions:0,anchors_exploded_est:0,bows_shot:0,crossbows_shot:0},end_entry:{logged:0b,gt:0L,player_y:0,top_y:-1,top_is_endstone:0b},explosive_stand:{logged:0b,y:0},damage_by_source:{beds_scaled:0,anchors_scaled:0,other_scaled:0},damage_events:[],explode_events:[]}
+execute unless data storage zdash:tracker meta{version:"v2026-02-21-stronghold-nav8"} run data modify storage zdash:tracker meta.version set value "v2026-02-21-stronghold-nav8"
+execute unless data storage zdash:tracker run run data modify storage zdash:tracker run set value {active:0b,start_gt:0L,end_gt:0L,dragon_died:0b,dragon_died_gt:0L,flyaway:{armed:0b,detected:0b,node:"",node_code:0,detected_gt:0L,dragon_x:0,dragon_y:0,dragon_z:0,detected_dist2:0,crystals_alive:-1},deltas:{beds_exploded:0,anchors_interactions:0,anchors_exploded_est:0,bows_shot:0,crossbows_shot:0},end_entry:{logged:0b,gt:0L,player_y:0,top_y:-1,top_is_endstone:0b,start_white_beds:0,start_anchors:0,start_bow:0,start_crossbow:0},explosive_stand:{logged:0b,y:0},damage_by_source:{beds_scaled:0,anchors_scaled:0,other_scaled:0},damage_events:[],explode_events:[]}
 execute unless data storage zdash:tracker run.active run data modify storage zdash:tracker run.active set value 0b
 execute unless data storage zdash:tracker run.start_gt run data modify storage zdash:tracker run.start_gt set value 0L
 execute unless data storage zdash:tracker run.end_gt run data modify storage zdash:tracker run.end_gt set value 0L
@@ -75,10 +88,17 @@ execute unless data storage zdash:tracker run.dragon_died_gt run data modify sto
 execute unless data storage zdash:tracker run.flyaway run data modify storage zdash:tracker run.flyaway set value {armed:0b,detected:0b,node:"",node_code:0,detected_gt:0L,dragon_x:0,dragon_y:0,dragon_z:0,detected_dist2:0,crystals_alive:-1}
 execute unless data storage zdash:tracker run.flyaway.crystals_alive run data modify storage zdash:tracker run.flyaway.crystals_alive set value -1
 execute unless data storage zdash:tracker run.deltas run data modify storage zdash:tracker run.deltas set value {beds_exploded:0,anchors_interactions:0,anchors_exploded_est:0,bows_shot:0,crossbows_shot:0}
-execute unless data storage zdash:tracker run.end_entry run data modify storage zdash:tracker run.end_entry set value {logged:0b,gt:0L,player_y:0,top_y:-1,top_is_endstone:0b}
+execute unless data storage zdash:tracker run.end_entry run data modify storage zdash:tracker run.end_entry set value {logged:0b,gt:0L,player_y:0,top_y:-1,top_is_endstone:0b,start_white_beds:0,start_anchors:0,start_bow:0,start_crossbow:0}
 execute unless data storage zdash:tracker run.explosive_stand run data modify storage zdash:tracker run.explosive_stand set value {logged:0b,y:0}
 execute unless data storage zdash:tracker run.damage_by_source run data modify storage zdash:tracker run.damage_by_source set value {beds_scaled:0,anchors_scaled:0,other_scaled:0}
 execute unless data storage zdash:tracker run.damage_events run data modify storage zdash:tracker run.damage_events set value []
 execute unless data storage zdash:tracker run.explode_events run data modify storage zdash:tracker run.explode_events set value []
 execute unless data storage zdash:tracker cur run data modify storage zdash:tracker cur set value {x:0,y:0,z:0,yaw:0,pitch:0,gt:0L}
 execute unless data storage zdash:tracker samples run data modify storage zdash:tracker samples set value []
+execute unless data storage zdash:tracker stronghold run data modify storage zdash:tracker stronghold set value {active:0b,sample_interval_ticks:5,eye_spy:{logged:0b,gt:0L,x:0,y:0,z:0,dim:0},end_enter:{logged:0b,gt:0L,x:0,y:0,z:0,dim:0},samples:[]}
+execute unless data storage zdash:tracker stronghold.active run data modify storage zdash:tracker stronghold.active set value 0b
+execute unless data storage zdash:tracker stronghold.sample_interval_ticks run data modify storage zdash:tracker stronghold.sample_interval_ticks set value 5
+execute unless data storage zdash:tracker stronghold.eye_spy run data modify storage zdash:tracker stronghold.eye_spy set value {logged:0b,gt:0L,x:0,y:0,z:0,dim:0}
+execute unless data storage zdash:tracker stronghold.end_enter run data modify storage zdash:tracker stronghold.end_enter set value {logged:0b,gt:0L,x:0,y:0,z:0,dim:0}
+execute unless data storage zdash:tracker stronghold.samples run data modify storage zdash:tracker stronghold.samples set value []
+execute unless data storage zdash:tracker stronghold_cur run data modify storage zdash:tracker stronghold_cur set value {x:0,y:0,z:0,gt:0L,dim:0}

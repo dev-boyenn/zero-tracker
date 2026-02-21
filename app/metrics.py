@@ -655,6 +655,62 @@ def skip_current_mpk_weak_lock(db: Database) -> dict[str, Any]:
     }
 
 
+def replace_current_mpk_weak_lock_with_open(db: Database) -> dict[str, Any]:
+    lock_key = db.get_state(_MPK_WEAK_LOCK_TARGET_KEY, "") or ""
+    parsed = parse_mpk_target_key(lock_key)
+    if parsed is None:
+        return {
+            "ok": False,
+            "error": "No active weak lock target.",
+            "had_lock": bool(lock_key),
+            "previous_target_key": lock_key,
+            "new_target_key": "",
+            "already_open": False,
+        }
+    tower_name, side, level = parsed
+    open_key = f"mpk|{tower_name}|{side}|48"
+    if int(level) == 48:
+        return {
+            "ok": True,
+            "error": "",
+            "had_lock": True,
+            "previous_target_key": lock_key,
+            "new_target_key": open_key,
+            "already_open": True,
+        }
+    # Verify open target is available in seed map before swapping.
+    seed_map, _, _ = _load_mpk_seed_map()
+    if (tower_name, side, 48) not in seed_map:
+        return {
+            "ok": False,
+            "error": "Open (O48) target not available for this tower/side in seed map.",
+            "had_lock": True,
+            "previous_target_key": lock_key,
+            "new_target_key": "",
+            "already_open": False,
+        }
+
+    anchor_after_id = _max_finished_mpk_attempt_id(db)
+    db.set_state(_MPK_WEAK_LOCK_TARGET_KEY, open_key)
+    db.set_state(_MPK_WEAK_LOCK_ANCHOR_ATTEMPT_ID_KEY, str(anchor_after_id))
+    # Clear queued key/seed so next recommendation/seed is recalculated for the new lock.
+    db.set_state("mpk.practice.target_key", "")
+    db.set_state("mpk.practice.seed_value", "")
+    db.set_state("mpk.practice.next_selection_reason", "weak_lock")
+    db.set_state("mpk.practice.next_selection_mode", "weak")
+    db.set_state("mpk.practice.next_requested_mode", "weak")
+
+    return {
+        "ok": True,
+        "error": "",
+        "had_lock": True,
+        "previous_target_key": lock_key,
+        "new_target_key": open_key,
+        "already_open": False,
+        "anchor_after_id": anchor_after_id,
+    }
+
+
 def rotate_mpk_seed_for_target_key(
     db: Database, target_key: str, *, advance: bool
 ) -> dict[str, Any]:
@@ -2270,6 +2326,10 @@ def compute_recent_attempts(
             anchors_exploded,
             bow_shots,
             crossbow_shots,
+            start_white_beds,
+            start_anchors,
+            start_bow,
+            start_crossbow,
             total_damage,
             major_damage_total,
             major_hit_count,
@@ -2349,6 +2409,10 @@ def compute_recent_attempts(
                 "bow_shots": _safe_int(row["bow_shots"]),
                 "crossbow_shots": _safe_int(row["crossbow_shots"]),
                 "bow_shots_total": _safe_int(row["bow_shots"]) + _safe_int(row["crossbow_shots"]),
+                "start_white_beds": _safe_int(row["start_white_beds"]),
+                "start_anchors": _safe_int(row["start_anchors"]),
+                "start_bow": _safe_int(row["start_bow"]),
+                "start_crossbow": _safe_int(row["start_crossbow"]),
                 "total_damage": total_damage,
                 "major_hit_count": major_hit_count,
                 "major_damage_per_hit": round(major_damage_per_hit, 2),

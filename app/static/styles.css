@@ -550,6 +550,17 @@ body {
   cursor: pointer;
 }
 
+#weakLockToOpenBtn {
+  background: rgba(9, 23, 33, 0.95);
+  color: var(--text);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 0.24rem 0.5rem;
+  font-family: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
 #clearMpkLocksBtn:hover {
   border-color: var(--accent-soft);
 }
@@ -562,12 +573,21 @@ body {
   border-color: var(--accent-soft);
 }
 
+#weakLockToOpenBtn:hover {
+  border-color: var(--accent-soft);
+}
+
 #fullRandomOverrideBtn:disabled {
   opacity: 0.55;
   cursor: default;
 }
 
 #skipWeakLockBtn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+#weakLockToOpenBtn:disabled {
   opacity: 0.55;
   cursor: default;
 }

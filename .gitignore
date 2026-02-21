@@ -27,6 +27,7 @@ data/*.db
 data/*.db-wal
 data/*.db-shm
 *.log
+tools/stronghold_cracker/build/
 
 # Local ad-hoc folders
 rohkx/

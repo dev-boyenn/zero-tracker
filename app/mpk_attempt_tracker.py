@@ -12,6 +12,7 @@ from scripts.parse_command_storage import (
     dominant_node_from_storage,
     rotation_from_storage,
     run_metrics_from_storage,
+    world_seed_from_level_dat,
 )
 from .metrics import (
     clear_runtime_atum_seed,
@@ -390,6 +391,7 @@ class MpkAttemptTracker:
             self._set_ingest_diag(reason="uninitialized_storage_snapshot", world_name=world_name)
             return
         bedrock = bedrock_by_node(world, radius=self.bedrock_radius)
+        world_seed = world_seed_from_level_dat(world)
         tower_height = bedrock.get(node) if node is not None else None
         tower_name = self._tower_name_from_height(tower_height)
         zero_type = self._zero_type_from_node(node, rotation)
@@ -460,7 +462,31 @@ class MpkAttemptTracker:
         explosives_plus_one_count = int(metrics.get("explosives_plus_one_count", 0) or 0)
         bows_shot = int(metrics.get("bows_shot", 0) or 0)
         crossbows_shot = int(metrics.get("crossbows_shot", 0) or 0)
+        start_white_beds = int(metrics.get("end_entry_start_white_beds", 0) or 0)
+        start_anchors = int(metrics.get("end_entry_start_anchors", 0) or 0)
+        start_bow = int(metrics.get("end_entry_start_bow", 0) or 0)
+        start_crossbow = int(metrics.get("end_entry_start_crossbow", 0) or 0)
         damage_events_count = int(metrics.get("damage_events_count", 0) or 0)
+        stronghold_eye_spy_gt = int(metrics.get("stronghold_eye_spy_gt", 0) or 0)
+        stronghold_end_enter_gt = int(metrics.get("stronghold_end_enter_gt", 0) or 0)
+        stronghold_nav_ticks = int(metrics.get("stronghold_nav_ticks", 0) or 0)
+        stronghold_nav_seconds = float(metrics.get("stronghold_nav_seconds", 0.0) or 0.0)
+        stronghold_samples_raw = metrics.get("stronghold_samples", [])
+        stronghold_samples: list[dict[str, int]] = []
+        if isinstance(stronghold_samples_raw, list):
+            for item in stronghold_samples_raw:
+                if not isinstance(item, dict):
+                    continue
+                stronghold_samples.append(
+                    {
+                        "gt": int(item.get("gt", 0) or 0),
+                        "x": int(item.get("x", 0) or 0),
+                        "y": int(item.get("y", 0) or 0),
+                        "z": int(item.get("z", 0) or 0),
+                        "dim": int(item.get("dim", 0) or 0),
+                    }
+                )
+        stronghold_sample_count = len(stronghold_samples)
         explosive_standing_y_raw = metrics.get("explosive_standing_y", None)
         explosive_standing_y = int(explosive_standing_y_raw) if explosive_standing_y_raw is not None else None
         o_level = None
@@ -495,6 +521,10 @@ class MpkAttemptTracker:
                 anchors_exploded,
                 bow_shots,
                 crossbow_shots,
+                start_white_beds,
+                start_anchors,
+                start_bow,
+                start_crossbow,
                 major_damage_total,
                 major_hit_count,
                 setup_damage_total,
@@ -509,9 +539,18 @@ class MpkAttemptTracker:
                 flyaway_node,
                 flyaway_crystals_alive,
                 world_name,
+                world_seed,
+                stronghold_eye_spy_gt,
+                stronghold_end_enter_gt,
+                stronghold_nav_ticks,
+                stronghold_nav_seconds,
+                stronghold_sample_count,
+                stronghold_rooms_entered,
+                stronghold_starter_ticks,
+                stronghold_starter_seconds,
                 created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, 'mpk', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, 'mpk', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 event_id,
@@ -534,6 +573,10 @@ class MpkAttemptTracker:
                 anchors_exploded_est,
                 bows_shot,
                 crossbows_shot,
+                start_white_beds,
+                start_anchors,
+                start_bow,
+                start_crossbow,
                 major_damage_total,
                 major_hit_count,
                 max_damage_single,
@@ -545,6 +588,15 @@ class MpkAttemptTracker:
                 flyaway_node if flyaway_node else None,
                 flyaway_crystals_alive if flyaway_crystals_alive >= 0 else None,
                 world_name,
+                int(world_seed) if world_seed is not None else None,
+                stronghold_eye_spy_gt if stronghold_eye_spy_gt > 0 else None,
+                stronghold_end_enter_gt if stronghold_end_enter_gt > 0 else None,
+                stronghold_nav_ticks if stronghold_nav_ticks > 0 else None,
+                stronghold_nav_seconds if stronghold_nav_seconds > 0 else None,
+                stronghold_sample_count if stronghold_sample_count > 0 else 0,
+                None,
+                None,
+                None,
                 ended_at_utc,
             ),
         )
@@ -582,6 +634,33 @@ class MpkAttemptTracker:
                 ),
             )
             bed_index += 1
+
+        for sample_idx, sample in enumerate(stronghold_samples):
+            self.db.execute(
+                """
+                INSERT INTO stronghold_samples (
+                    attempt_id,
+                    sample_index,
+                    gt,
+                    x,
+                    y,
+                    z,
+                    dim,
+                    created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    attempt_id,
+                    sample_idx,
+                    int(sample.get("gt", 0) or 0),
+                    int(sample.get("x", 0) or 0),
+                    int(sample.get("y", 0) or 0),
+                    int(sample.get("z", 0) or 0),
+                    int(sample.get("dim", 0) or 0),
+                    ended_at_utc,
+                ),
+            )
 
         self.db.set_state(self.state_last_world_key, world_name)
         self._set_ingest_diag(reason="inserted", world_name=world_name)
