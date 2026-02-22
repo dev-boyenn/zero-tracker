@@ -22,6 +22,7 @@ import kaptainwutax.featureutils.structure.generator.structure.StrongholdGenerat
 import kaptainwutax.mcutils.rand.ChunkRand;
 import kaptainwutax.mcutils.state.Dimension;
 import kaptainwutax.mcutils.util.block.BlockBox;
+import kaptainwutax.mcutils.util.block.BlockDirection;
 import kaptainwutax.mcutils.util.pos.CPos;
 import kaptainwutax.mcutils.version.MCVersion;
 import kaptainwutax.seedutils.rand.JRand;
@@ -544,6 +545,9 @@ public final class StrongholdCrackerMain {
             sb.append("    {");
             sb.append("\"id\": ").append(i).append(", ");
             sb.append("\"type\": ").append(quote(piece.getClass().getSimpleName())).append(", ");
+            BlockDirection facing = piece.getFacing();
+            String facingName = facing == null ? "NONE" : facing.name();
+            sb.append("\"facing\": ").append(quote(facingName)).append(", ");
             if (box != null) {
                 sb.append("\"min_x\": ").append(box.minX).append(", ");
                 sb.append("\"min_y\": ").append(box.minY).append(", ");

@@ -72,6 +72,139 @@ def _room_fill_for_seconds(seconds: float, max_seconds: float, visited: bool) ->
     return _rgb_hex(int(r), int(g), int(b))
 
 
+def _room_icon_spec(room_type: str, *, is_wide: bool) -> dict[str, Any]:
+    t = str(room_type or "Unknown")
+    if t in ("Corridor", "SmallCorridor"):
+        return {
+            "lines": [((0.14, 0.50), (0.86, 0.50))] if is_wide else [((0.50, 0.14), (0.50, 0.86))],
+            "rects": [],
+            "circles": [],
+        }
+    if t == "LeftTurn":
+        return {
+            "lines": [((0.22, 0.78), (0.22, 0.38)), ((0.22, 0.78), (0.66, 0.78))],
+            "rects": [],
+            "circles": [],
+        }
+    if t == "RightTurn":
+        return {
+            "lines": [((0.78, 0.78), (0.78, 0.38)), ((0.34, 0.78), (0.78, 0.78))],
+            "rects": [],
+            "circles": [],
+        }
+    if t == "FiveWayCrossing":
+        return {
+            "lines": [
+                ((0.50, 0.14), (0.50, 0.86)),
+                ((0.14, 0.50), (0.86, 0.50)),
+                ((0.50, 0.50), (0.26, 0.26)),
+                ((0.50, 0.50), (0.74, 0.26)),
+            ],
+            "rects": [],
+            "circles": [],
+        }
+    if t == "Stairs":
+        return {
+            "lines": [
+                ((0.18, 0.76), (0.38, 0.76)),
+                ((0.38, 0.76), (0.38, 0.58)),
+                ((0.38, 0.58), (0.58, 0.58)),
+                ((0.58, 0.58), (0.58, 0.40)),
+                ((0.58, 0.40), (0.78, 0.40)),
+            ],
+            "rects": [],
+            "circles": [],
+        }
+    if t in ("SpiralStaircase", "Start"):
+        return {
+            "lines": [
+                ((0.50, 0.20), (0.68, 0.34)),
+                ((0.68, 0.34), (0.62, 0.56)),
+                ((0.62, 0.56), (0.44, 0.62)),
+                ((0.44, 0.62), (0.34, 0.50)),
+                ((0.34, 0.50), (0.42, 0.40)),
+                ((0.42, 0.40), (0.52, 0.44)),
+            ],
+            "rects": [((0.20, 0.20), 0.60, 0.60)],
+            "circles": [],
+        }
+    if t == "PrisonHall":
+        return {
+            "lines": [
+                ((0.36, 0.24), (0.36, 0.76)),
+                ((0.50, 0.24), (0.50, 0.76)),
+                ((0.64, 0.24), (0.64, 0.76)),
+            ],
+            "rects": [((0.18, 0.20), 0.64, 0.60)],
+            "circles": [],
+        }
+    if t == "ChestCorridor":
+        return {
+            "lines": [((0.16, 0.50), (0.84, 0.50))] if is_wide else [((0.50, 0.16), (0.50, 0.84))],
+            "rects": [((0.42, 0.38), 0.16, 0.16)],
+            "circles": [],
+        }
+    if t == "SquareRoom":
+        return {
+            "lines": [],
+            "rects": [((0.24, 0.24), 0.52, 0.52)],
+            "circles": [((0.50, 0.50), 0.05)],
+        }
+    if t == "Library":
+        return {
+            "lines": [
+                ((0.50, 0.24), (0.50, 0.76)),
+                ((0.20, 0.28), (0.50, 0.24)),
+                ((0.20, 0.72), (0.50, 0.76)),
+                ((0.80, 0.28), (0.50, 0.24)),
+                ((0.80, 0.72), (0.50, 0.76)),
+            ],
+            "rects": [],
+            "circles": [],
+        }
+    if t == "PortalRoom":
+        return {
+            "lines": [],
+            "rects": [((0.18, 0.20), 0.64, 0.60), ((0.34, 0.36), 0.32, 0.28)],
+            "circles": [],
+        }
+    return {
+        "lines": [((0.22, 0.22), (0.78, 0.78)), ((0.22, 0.78), (0.78, 0.22))],
+        "rects": [],
+        "circles": [],
+    }
+
+
+def _facing_quarter_turns_for_mirrored_map(facing: str) -> int:
+    # Map is mirrored on horizontal axis, so east/west are swapped visually.
+    f = str(facing or "NONE").upper()
+    if f == "NORTH":
+        return 0
+    if f == "EAST":
+        return 3
+    if f == "SOUTH":
+        return 2
+    if f == "WEST":
+        return 1
+    return 0
+
+
+def _rotate_unit_point(x: float, y: float, turns: int) -> tuple[float, float]:
+    t = int(turns) % 4
+    cx = 0.5
+    cy = 0.5
+    dx = float(x) - cx
+    dy = float(y) - cy
+    if t == 0:
+        return (cx + dx, cy + dy)
+    if t == 1:
+        # 90° clockwise in SVG coordinates (y down).
+        return (cx + dy, cy - dx)
+    if t == 2:
+        return (cx - dx, cy - dy)
+    return (cx - dy, cy + dx)
+
+
 def render_map_svg(
     json_path: Path,
     output_svg: Path | None = None,
@@ -96,6 +229,7 @@ def render_map_svg(
             room = {
                 "id": int(piece.get("id", -1)),
                 "type": str(piece.get("type", "Unknown")),
+                "facing": str(piece.get("facing", "NONE")),
                 "min_x": float(piece.get("min_x")),
                 "max_x": float(piece.get("max_x")),
                 "min_y": float(piece.get("min_y")),
@@ -123,7 +257,8 @@ def render_map_svg(
     scale = min(map_w / span_x, map_h / span_z)
 
     def sx(x: float) -> float:
-        return margin + (x - min_x) * scale
+        # Horizontal mirror so rendered left/right matches expected in-world orientation.
+        return margin + (max_x - x) * scale
 
     def sy(z: float) -> float:
         # z increases downward in world topdown; invert for chart.
@@ -274,6 +409,84 @@ def render_map_svg(
             f'fill="{fill}" stroke="{stroke}" stroke-width="{stroke_w}">'
             f"<title>#{room_id} {room['type']} | {secs:.2f}s</title></rect>"
         )
+
+        # Room glyphs: minimal icon per room type (kept subtle and unobtrusive).
+        icon_size = min(rw, rh) * 0.62
+        if icon_size >= 7.0:
+            cx = rx + rw * 0.5
+            cy = ry + rh * 0.5
+            ox = cx - icon_size * 0.5
+            oy = cy - icon_size * 0.5
+            icon = _room_icon_spec(str(room["type"]), is_wide=(rw >= rh))
+            turns = _facing_quarter_turns_for_mirrored_map(str(room.get("facing", "NONE")))
+            if str(room.get("type", "")) == "FiveWayCrossing":
+                # Empirical correction: 5-way glyph orientation needs a 180° flip.
+                turns = (turns + 2) % 4
+            icon_sw = max(0.9, min(1.7, icon_size * 0.055))
+            if is_visited:
+                base_color = "#06111d"
+                base_opacity = "0.68"
+                hi_color = "#f4fbff"
+                hi_opacity = "0.45"
+                hi_sw = max(0.55, icon_sw * 0.45)
+            else:
+                base_color = "#c7def3"
+                base_opacity = "0.30"
+                hi_color = ""
+                hi_opacity = "0.0"
+                hi_sw = 0.0
+
+            for (ax, ay), (bx, by) in icon.get("lines", []):
+                rax, ray = _rotate_unit_point(float(ax), float(ay), turns)
+                rbx, rby = _rotate_unit_point(float(bx), float(by), turns)
+                x1 = ox + float(rax) * icon_size
+                y1 = oy + float(ray) * icon_size
+                x2 = ox + float(rbx) * icon_size
+                y2 = oy + float(rby) * icon_size
+                lines.append(
+                    f'  <line x1="{x1:.2f}" y1="{y1:.2f}" x2="{x2:.2f}" y2="{y2:.2f}" '
+                    f'stroke="{base_color}" stroke-opacity="{base_opacity}" stroke-width="{icon_sw:.2f}" stroke-linecap="round" />'
+                )
+                if is_visited:
+                    lines.append(
+                        f'  <line x1="{x1:.2f}" y1="{y1:.2f}" x2="{x2:.2f}" y2="{y2:.2f}" '
+                        f'stroke="{hi_color}" stroke-opacity="{hi_opacity}" stroke-width="{hi_sw:.2f}" stroke-linecap="round" />'
+                    )
+            for (rxn, ryn), rwn, rhn in icon.get("rects", []):
+                c1 = _rotate_unit_point(float(rxn), float(ryn), turns)
+                c2 = _rotate_unit_point(float(rxn) + float(rwn), float(ryn), turns)
+                c3 = _rotate_unit_point(float(rxn) + float(rwn), float(ryn) + float(rhn), turns)
+                c4 = _rotate_unit_point(float(rxn), float(ryn) + float(rhn), turns)
+                xs = [c1[0], c2[0], c3[0], c4[0]]
+                ys = [c1[1], c2[1], c3[1], c4[1]]
+                rr_x = ox + min(xs) * icon_size
+                rr_y = oy + min(ys) * icon_size
+                rr_w = max(0.8, (max(xs) - min(xs)) * icon_size)
+                rr_h = max(0.8, (max(ys) - min(ys)) * icon_size)
+                lines.append(
+                    f'  <rect x="{rr_x:.2f}" y="{rr_y:.2f}" width="{rr_w:.2f}" height="{rr_h:.2f}" '
+                    f'fill="none" stroke="{base_color}" stroke-opacity="{base_opacity}" stroke-width="{icon_sw:.2f}" />'
+                )
+                if is_visited:
+                    lines.append(
+                        f'  <rect x="{rr_x:.2f}" y="{rr_y:.2f}" width="{rr_w:.2f}" height="{rr_h:.2f}" '
+                        f'fill="none" stroke="{hi_color}" stroke-opacity="{hi_opacity}" stroke-width="{hi_sw:.2f}" />'
+                    )
+            for (ccx, ccy), rr in icon.get("circles", []):
+                rcx, rcy = _rotate_unit_point(float(ccx), float(ccy), turns)
+                c_x = ox + float(rcx) * icon_size
+                c_y = oy + float(rcy) * icon_size
+                r = max(0.8, float(rr) * icon_size)
+                lines.append(
+                    f'  <circle cx="{c_x:.2f}" cy="{c_y:.2f}" r="{r:.2f}" '
+                    f'fill="{base_color}" fill-opacity="{base_opacity}" stroke="none" />'
+                )
+                if is_visited:
+                    lines.append(
+                        f'  <circle cx="{c_x:.2f}" cy="{c_y:.2f}" r="{max(0.6, r * 0.55):.2f}" '
+                        f'fill="{hi_color}" fill-opacity="{hi_opacity}" stroke="none" />'
+                    )
+
         if is_visited:
             cx = rx + rw * 0.5
             cy = ry + rh * 0.5
@@ -456,6 +669,31 @@ def render_map_svg(
         )
         lines.append(
             f'  <text x="{(tag_x+pad_x):.2f}" y="{tag_y:.2f}" class="keyTag">{_escape_xml(label)}</text>'
+        )
+
+    # Subtle chunk grid overlay (16x16 blocks) on top layer.
+    chunk_stroke = "#88b1d6"
+    chunk_opacity = "0.16"
+    chunk_dash = "1.5,5.0"
+    x_chunk_start = int(min_x) // 16
+    x_chunk_end = int(max_x) // 16
+    z_chunk_start = int(min_z) // 16
+    z_chunk_end = int(max_z) // 16
+    for cx in range(x_chunk_start, x_chunk_end + 2):
+        wx = float(cx * 16)
+        lx = sx(wx)
+        lines.append(
+            f'  <line x1="{lx:.2f}" y1="{(margin+header):.2f}" x2="{lx:.2f}" y2="{(margin+header+map_h):.2f}" '
+            f'stroke="{chunk_stroke}" stroke-opacity="{chunk_opacity}" stroke-width="0.9" '
+            f'stroke-dasharray="{chunk_dash}" />'
+        )
+    for cz in range(z_chunk_start, z_chunk_end + 2):
+        wz = float(cz * 16)
+        ly = sy(wz)
+        lines.append(
+            f'  <line x1="{margin:.2f}" y1="{ly:.2f}" x2="{(margin+map_w):.2f}" y2="{ly:.2f}" '
+            f'stroke="{chunk_stroke}" stroke-opacity="{chunk_opacity}" stroke-width="0.9" '
+            f'stroke-dasharray="{chunk_dash}" />'
         )
 
     # Legend
