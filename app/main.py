@@ -15,7 +15,7 @@ from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from config import DB_PATH, MPK_ENABLED, POLL_SECONDS, STATIC_DIR
+from config import DB_PATH, MPK_ENABLED, POLL_SECONDS, PROJECT_ROOT, STATIC_DIR
 from .database import Database
 from .log_watcher import LogWatcher
 from .metrics import (
@@ -44,6 +44,9 @@ except ModuleNotFoundError:
 
 def utc_now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+STRONGHOLD_MAPS_DIR = PROJECT_ROOT / "data" / "stronghold_maps"
 
 
 class MpkSetupRequest(BaseModel):
@@ -341,6 +344,59 @@ def _runtime_health_payload(app: FastAPI, db: Database) -> dict[str, object]:
     }
 
 
+def _resolve_stronghold_map_path(raw_path: str | None) -> Path | None:
+    if not raw_path:
+        return None
+    candidate = Path(str(raw_path))
+    if not candidate.is_absolute():
+        candidate = PROJECT_ROOT / candidate
+    try:
+        resolved = candidate.resolve()
+        base = STRONGHOLD_MAPS_DIR.resolve()
+    except Exception:
+        return None
+    if not str(resolved).startswith(str(base)):
+        return None
+    if not resolved.exists() or not resolved.is_file():
+        return None
+    return resolved
+
+
+def _stronghold_svg_url(attempt_id: int, svg_path: str | None) -> str | None:
+    if _resolve_stronghold_map_path(svg_path) is None:
+        return None
+    return f"/api/stronghold/attempt/{attempt_id}/svg"
+
+
+def _stronghold_json_url(attempt_id: int, json_path: str | None) -> str | None:
+    if _resolve_stronghold_map_path(json_path) is None:
+        return None
+    return f"/api/stronghold/attempt/{attempt_id}/map-json"
+
+
+def _derive_nav_seconds_from_visits(visits: Any) -> float:
+    if not isinstance(visits, list) or not visits:
+        return 0.0
+    enters: list[int] = []
+    exits: list[int] = []
+    for visit in visits:
+        if not isinstance(visit, dict):
+            continue
+        enter_gt = int(visit.get("enter_gt", 0) or 0)
+        exit_gt = int(visit.get("exit_gt", 0) or 0)
+        if enter_gt > 0:
+            enters.append(enter_gt)
+        if exit_gt > 0:
+            exits.append(exit_gt)
+    if not enters or not exits:
+        return 0.0
+    start_gt = min(enters)
+    end_gt = max(exits)
+    if end_gt <= start_gt:
+        return 0.0
+    return float(end_gt - start_gt) / 20.0
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db = Database(DB_PATH)
@@ -379,6 +435,16 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
+
+
+@app.get("/stronghold")
+def stronghold_index() -> FileResponse:
+    return FileResponse(STATIC_DIR / "stronghold.html")
+
+
+@app.get("/stronghold/{attempt_id}")
+def stronghold_detail_page(attempt_id: int) -> FileResponse:
+    return FileResponse(STATIC_DIR / "stronghold_detail.html")
 
 
 @app.get("/api/health")
@@ -576,6 +642,7 @@ def _build_dashboard_payload_cached(
                 cache.pop(k, None)
     payload["server_time_utc"] = utc_now()
     payload["db_path"] = str(DB_PATH)
+    payload["latest_attempt_id"] = max_attempt_id
     return payload
 
 
@@ -653,7 +720,73 @@ def recent_stronghold_runs(
     request: Request,
     limit: int = Query(default=25, ge=1, le=200),
 ) -> dict[str, object]:
+    payload = stronghold_dashboard(request, limit=limit)
+    return {"runs": payload.get("runs", [])}
+
+
+@app.get("/api/stronghold/version")
+def stronghold_version(request: Request) -> dict[str, object]:
     db: Database = request.app.state.db
+    row = db.query_one(
+        """
+        SELECT COALESCE(MAX(id), 0) AS latest_attempt_id
+        FROM attempts
+        WHERE COALESCE(attempt_source, 'practice') = 'mpk'
+          AND COALESCE(stronghold_sample_count, 0) > 0
+        """
+    )
+    latest_attempt_id = int(row["latest_attempt_id"]) if row is not None else 0
+    return {"latest_attempt_id": latest_attempt_id}
+
+
+@app.get("/api/stronghold/dashboard")
+def stronghold_dashboard(
+    request: Request,
+    limit: int = Query(default=40, ge=1, le=300),
+) -> dict[str, object]:
+    db: Database = request.app.state.db
+    summary_row = db.query_one(
+        """
+        SELECT
+            COUNT(*) AS attempts,
+            SUM(CASE WHEN COALESCE(stronghold_portal_room_entered, 0) = 1 THEN 1 ELSE 0 END) AS portal_successes,
+            AVG(stronghold_starter_seconds) AS avg_starter_seconds,
+            AVG(stronghold_avg_room_seconds) AS avg_room_seconds,
+            AVG(
+                CASE
+                    WHEN COALESCE(stronghold_nav_seconds, 0) > 0 THEN stronghold_nav_seconds
+                    WHEN COALESCE(stronghold_nav_ticks, 0) > 0 THEN (stronghold_nav_ticks / 20.0)
+                    ELSE NULL
+                END
+            ) AS avg_nav_seconds,
+            AVG(stronghold_rooms_entered) AS avg_rooms_entered,
+            AVG(stronghold_room_delta) AS avg_room_delta,
+            AVG(stronghold_optimal_rooms) AS avg_optimal_rooms
+        FROM attempts
+        WHERE COALESCE(attempt_source, 'practice') = 'mpk'
+          AND COALESCE(stronghold_sample_count, 0) > 0
+        """
+    )
+    total_attempts = int(summary_row["attempts"]) if summary_row is not None and summary_row["attempts"] is not None else 0
+    portal_successes = (
+        int(summary_row["portal_successes"])
+        if summary_row is not None and summary_row["portal_successes"] is not None
+        else 0
+    )
+    summary = {
+        "attempts": total_attempts,
+        "portal_successes": portal_successes,
+        "portal_success_rate": round((portal_successes / total_attempts) * 100.0, 2)
+        if total_attempts > 0
+        else 0.0,
+        "avg_starter_seconds": float(summary_row["avg_starter_seconds"] or 0.0) if summary_row is not None else 0.0,
+        "avg_room_seconds": float(summary_row["avg_room_seconds"] or 0.0) if summary_row is not None else 0.0,
+        "avg_nav_seconds": float(summary_row["avg_nav_seconds"] or 0.0) if summary_row is not None else 0.0,
+        "avg_rooms_entered": float(summary_row["avg_rooms_entered"] or 0.0) if summary_row is not None else 0.0,
+        "avg_room_delta": float(summary_row["avg_room_delta"] or 0.0) if summary_row is not None else 0.0,
+        "avg_optimal_rooms": float(summary_row["avg_optimal_rooms"] or 0.0) if summary_row is not None else 0.0,
+    }
+
     rows = db.query_all(
         """
         SELECT
@@ -661,8 +794,11 @@ def recent_stronghold_runs(
             started_at_utc,
             ended_at_utc,
             status,
+            fail_reason,
             tower_name,
             zero_type,
+            o_level,
+            standing_height,
             world_name,
             world_seed,
             stronghold_eye_spy_gt,
@@ -672,7 +808,15 @@ def recent_stronghold_runs(
             stronghold_sample_count,
             stronghold_rooms_entered,
             stronghold_starter_ticks,
-            stronghold_starter_seconds
+            stronghold_starter_seconds,
+            stronghold_avg_room_ticks,
+            stronghold_avg_room_seconds,
+            stronghold_portal_room_entered,
+            stronghold_optimal_rooms,
+            stronghold_optimal_edges,
+            stronghold_room_delta,
+            stronghold_map_json_path,
+            stronghold_map_svg_path
         FROM attempts
         WHERE COALESCE(attempt_source, 'practice') = 'mpk'
           AND COALESCE(stronghold_sample_count, 0) > 0
@@ -681,7 +825,40 @@ def recent_stronghold_runs(
         """,
         (limit,),
     )
-    return {"runs": [dict(row) for row in rows]}
+    runs: list[dict[str, object]] = []
+    for row in rows:
+        attempt_id = int(row["id"])
+        zero_type = str(row["zero_type"] or "")
+        side = "Front" if zero_type.startswith("Front ") else "Back" if zero_type.startswith("Back ") else "Unknown"
+        svg_url = _stronghold_svg_url(attempt_id, row["stronghold_map_svg_path"])
+        json_url = _stronghold_json_url(attempt_id, row["stronghold_map_json_path"])
+        nav_seconds = float(row["stronghold_nav_seconds"] or 0.0)
+        nav_ticks = int(row["stronghold_nav_ticks"] or 0)
+        if nav_seconds <= 0.0 and json_url is not None:
+            json_path = _resolve_stronghold_map_path(row["stronghold_map_json_path"])
+            if json_path is not None:
+                try:
+                    parsed = json.loads(json_path.read_text(encoding="utf-8"))
+                    nav_seconds_fallback = _derive_nav_seconds_from_visits(parsed.get("visits", []))
+                    if nav_seconds_fallback > 0.0:
+                        nav_seconds = nav_seconds_fallback
+                        nav_ticks = int(round(nav_seconds_fallback * 20.0))
+                except Exception:
+                    pass
+        runs.append(
+            {
+                **dict(row),
+                "stronghold_nav_ticks": nav_ticks if nav_ticks > 0 else None,
+                "stronghold_nav_seconds": nav_seconds if nav_seconds > 0 else None,
+                "side": side,
+                "portal_success": bool(int(row["stronghold_portal_room_entered"] or 0)),
+                "detail_url": f"/stronghold/{attempt_id}",
+                "svg_url": svg_url,
+                "json_url": json_url,
+                "has_map": bool(svg_url),
+            }
+        )
+    return {"summary": summary, "runs": runs}
 
 
 @app.get("/api/stronghold/attempt/{attempt_id}")
@@ -694,8 +871,11 @@ def stronghold_attempt_detail(request: Request, attempt_id: int) -> dict[str, ob
             started_at_utc,
             ended_at_utc,
             status,
+            fail_reason,
             tower_name,
             zero_type,
+            o_level,
+            standing_height,
             world_name,
             world_seed,
             stronghold_eye_spy_gt,
@@ -705,7 +885,15 @@ def stronghold_attempt_detail(request: Request, attempt_id: int) -> dict[str, ob
             stronghold_sample_count,
             stronghold_rooms_entered,
             stronghold_starter_ticks,
-            stronghold_starter_seconds
+            stronghold_starter_seconds,
+            stronghold_avg_room_ticks,
+            stronghold_avg_room_seconds,
+            stronghold_portal_room_entered,
+            stronghold_optimal_rooms,
+            stronghold_optimal_edges,
+            stronghold_room_delta,
+            stronghold_map_json_path,
+            stronghold_map_svg_path
         FROM attempts
         WHERE id = ?
           AND COALESCE(attempt_source, 'practice') = 'mpk'
@@ -729,7 +917,91 @@ def stronghold_attempt_detail(request: Request, attempt_id: int) -> dict[str, ob
         """,
         (attempt_id,),
     )
-    return {"ok": True, "attempt": dict(row), "samples": [dict(s) for s in samples]}
+    attempt = dict(row)
+    zero_type = str(attempt.get("zero_type") or "")
+    attempt["side"] = (
+        "Front" if zero_type.startswith("Front ") else "Back" if zero_type.startswith("Back ") else "Unknown"
+    )
+    attempt["portal_success"] = bool(int(attempt.get("stronghold_portal_room_entered") or 0))
+    attempt["detail_url"] = f"/stronghold/{attempt_id}"
+    attempt["svg_url"] = _stronghold_svg_url(attempt_id, attempt.get("stronghold_map_svg_path"))
+    attempt["json_url"] = _stronghold_json_url(attempt_id, attempt.get("stronghold_map_json_path"))
+    map_payload: dict[str, object] | None = None
+    json_path = _resolve_stronghold_map_path(attempt.get("stronghold_map_json_path"))
+    if json_path is not None:
+        try:
+            parsed = json.loads(json_path.read_text(encoding="utf-8"))
+            if isinstance(parsed, dict):
+                map_payload = parsed
+        except Exception:
+            map_payload = None
+    analysis: dict[str, object] | None = None
+    if map_payload is not None:
+        pieces = map_payload.get("pieces", [])
+        visits = map_payload.get("visits", [])
+        doors = map_payload.get("doors", [])
+        chests = map_payload.get("chests", [])
+        spawners = map_payload.get("spawners", [])
+        nav_seconds_fallback = _derive_nav_seconds_from_visits(visits)
+        if float(attempt.get("stronghold_nav_seconds") or 0.0) <= 0.0 and nav_seconds_fallback > 0.0:
+            attempt["stronghold_nav_seconds"] = nav_seconds_fallback
+            attempt["stronghold_nav_ticks"] = int(round(nav_seconds_fallback * 20.0))
+        analysis = {
+            "sample_stats": map_payload.get("sample_stats", {}),
+            "starter": map_payload.get("starter", {}),
+            "optimal_nav": map_payload.get("optimal_nav", {}),
+            "visits": visits if isinstance(visits, list) else [],
+            "pieces_count": len(pieces) if isinstance(pieces, list) else 0,
+            "doors_count": len(doors) if isinstance(doors, list) else 0,
+            "chests_count": len(chests) if isinstance(chests, list) else 0,
+            "spawners_count": len(spawners) if isinstance(spawners, list) else 0,
+        }
+    return {
+        "ok": True,
+        "attempt": attempt,
+        "samples": [dict(s) for s in samples],
+        "analysis": analysis,
+    }
+
+
+@app.get("/api/stronghold/attempt/{attempt_id}/svg")
+def stronghold_attempt_svg(request: Request, attempt_id: int):
+    db: Database = request.app.state.db
+    row = db.query_one(
+        """
+        SELECT stronghold_map_svg_path
+        FROM attempts
+        WHERE id = ?
+          AND COALESCE(attempt_source, 'practice') = 'mpk'
+        """,
+        (attempt_id,),
+    )
+    if row is None:
+        return {"ok": False, "error": "Attempt not found."}
+    svg_path = _resolve_stronghold_map_path(row["stronghold_map_svg_path"])
+    if svg_path is None:
+        return {"ok": False, "error": "SVG not available."}
+    return FileResponse(svg_path, media_type="image/svg+xml")
+
+
+@app.get("/api/stronghold/attempt/{attempt_id}/map-json")
+def stronghold_attempt_map_json(request: Request, attempt_id: int):
+    db: Database = request.app.state.db
+    row = db.query_one(
+        """
+        SELECT stronghold_map_json_path
+        FROM attempts
+        WHERE id = ?
+          AND COALESCE(attempt_source, 'practice') = 'mpk'
+        """,
+        (attempt_id,),
+    )
+    if row is None:
+        return {"ok": False, "error": "Attempt not found."}
+    json_path = _resolve_stronghold_map_path(row["stronghold_map_json_path"])
+    if json_path is None:
+        return {"ok": False, "error": "JSON not available."}
+    return FileResponse(json_path, media_type="application/json")
 
 
 @app.get("/api/mpk/lock-targets")

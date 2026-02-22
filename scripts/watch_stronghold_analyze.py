@@ -10,6 +10,15 @@ import time
 
 _SAVE_WORLD_RE = re.compile(r"ServerLevel\[(?P<name>[^\]]+)\]")
 _CACHE_WORLD_RE = re.compile(r"Cached options for '(?P<name>[^']+)'")
+_F3C_TP_RE = re.compile(
+    r"^/execute\s+in\s+(?P<dim>[a-z0-9_:\.-]+)\s+run\s+tp\s+@s\s+"
+    r"(?P<x>-?\d+(?:\.\d+)?)\s+"
+    r"(?P<y>-?\d+(?:\.\d+)?)\s+"
+    r"(?P<z>-?\d+(?:\.\d+)?)\s+"
+    r"(?P<yaw>-?\d+(?:\.\d+)?)\s+"
+    r"(?P<pitch>-?\d+(?:\.\d+)?)\s*$",
+    re.IGNORECASE,
+)
 
 
 def _extract_world_name_hint(raw_line: str) -> str | None:
@@ -60,12 +69,20 @@ def _run_analyzer_once(
     *,
     update_db: bool,
     rebuild: bool,
+    aim_lines: list[str],
+    timing: bool,
 ) -> tuple[int, str]:
     cmd = [sys.executable, str(analyzer_path), str(world_path)]
     if update_db:
         cmd.append("--update-db")
     if rebuild:
         cmd.append("--rebuild")
+    for raw_line in aim_lines:
+        line = str(raw_line or "").strip()
+        if line:
+            cmd.extend(["--aim-line", line])
+    if timing:
+        cmd.append("--timing")
     proc = subprocess.run(
         cmd,
         capture_output=True,
@@ -86,6 +103,8 @@ def _analyze_with_retry(
     *,
     update_db: bool,
     rebuild: bool,
+    aim_lines: list[str],
+    timing: bool,
     retry_seconds: float,
     retry_interval: float,
 ) -> bool:
@@ -98,6 +117,8 @@ def _analyze_with_retry(
             world_path,
             update_db=update_db,
             rebuild=rebuild if attempt == 1 else False,
+            aim_lines=aim_lines,
+            timing=timing,
         )
         print(f"[analyze attempt {attempt}] world={world_path.name} exit={code}")
         if output:
@@ -108,6 +129,49 @@ def _analyze_with_retry(
         if now >= deadline:
             return False
         time.sleep(max(0.1, retry_interval))
+
+
+def _read_clipboard_text_windows() -> str | None:
+    try:
+        proc = subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                "Get-Clipboard -Raw",
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=1.2,
+        )
+    except Exception:
+        return None
+    if int(proc.returncode) != 0:
+        return None
+    return str(proc.stdout or "").strip()
+
+
+def _parse_f3c_tp_line(line: str | None) -> dict[str, float | str] | None:
+    raw = str(line or "").strip()
+    if not raw:
+        return None
+    m = _F3C_TP_RE.match(raw)
+    if not m:
+        return None
+    try:
+        return {
+            "raw": raw,
+            "dim": str(m.group("dim")).lower(),
+            "x": float(m.group("x")),
+            "y": float(m.group("y")),
+            "z": float(m.group("z")),
+            "yaw": float(m.group("yaw")),
+            "pitch": float(m.group("pitch")),
+        }
+    except Exception:
+        return None
 
 
 def main() -> int:
@@ -141,6 +205,11 @@ def main() -> int:
         action="store_true",
         help="Pass --rebuild on first analyze attempt after each exit.",
     )
+    parser.add_argument(
+        "--timing",
+        action="store_true",
+        help="Pass --timing to analyze_stronghold_world.py for phase timing diagnostics.",
+    )
     args = parser.parse_args()
 
     root = Path(args.instance)
@@ -160,11 +229,33 @@ def main() -> int:
     last_processed_world = ""
     last_world_hint = ""
     last_world_hint_ts = 0.0
+    last_clip_poll_ts = 0.0
+    last_clip_raw = ""
+    latest_aim_lines: list[str] = []
+    latest_aim_seen: set[str] = set()
     position = log_path.stat().st_size
     print(f"Watching log: {log_path}")
     print(f"Saves dir: {saves_dir}")
     while True:
         try:
+            now = time.time()
+            if (now - last_clip_poll_ts) >= 0.9:
+                last_clip_poll_ts = now
+                clip_raw = _read_clipboard_text_windows()
+                if clip_raw and clip_raw != last_clip_raw:
+                    last_clip_raw = clip_raw
+                    parsed = _parse_f3c_tp_line(clip_raw)
+                    if parsed is not None:
+                        raw = str(parsed["raw"])
+                        if raw not in latest_aim_seen:
+                            latest_aim_seen.add(raw)
+                            latest_aim_lines.append(raw)
+                            print(
+                                "[clip] captured F3+C aim: "
+                                + f"x={float(parsed['x']):.2f} y={float(parsed['y']):.2f} z={float(parsed['z']):.2f} "
+                                + f"yaw={float(parsed['yaw']):.2f} dim={parsed['dim']} "
+                                + f"(n={len(latest_aim_lines)})"
+                            )
             size = log_path.stat().st_size
             if size < position:
                 position = 0
@@ -212,6 +303,8 @@ def main() -> int:
                     world,
                     update_db=bool(args.update_db),
                     rebuild=bool(args.rebuild),
+                    aim_lines=latest_aim_lines,
+                    timing=bool(args.timing),
                     retry_seconds=float(args.retry_seconds),
                     retry_interval=float(args.retry_interval),
                 )
@@ -219,8 +312,12 @@ def main() -> int:
                     last_processed_world = world.name
                     last_world_hint = ""
                     last_world_hint_ts = 0.0
+                    latest_aim_lines = []
+                    latest_aim_seen = set()
                     print(f"[done] analyzed {world.name}")
                 else:
+                    latest_aim_lines = []
+                    latest_aim_seen = set()
                     print(f"[failed] could not analyze {world.name} within retry window")
         except KeyboardInterrupt:
             return 0

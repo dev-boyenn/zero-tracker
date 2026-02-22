@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,29 @@ def _rgb_hex(r: int, g: int, b: int) -> str:
     g = max(0, min(255, int(g)))
     b = max(0, min(255, int(b)))
     return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def _hex_to_rgb(color: str) -> tuple[int, int, int]:
+    c = str(color or "").strip().lower()
+    if c.startswith("#"):
+        c = c[1:]
+    if len(c) != 6:
+        return (29, 46, 64)
+    try:
+        return (int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16))
+    except Exception:
+        return (29, 46, 64)
+
+
+def _blend_hex(a: str, b: str, t: float) -> str:
+    t = _clamp01(float(t))
+    ar, ag, ab = _hex_to_rgb(a)
+    br, bg, bb = _hex_to_rgb(b)
+    return _rgb_hex(
+        int(round(_lerp(ar, br, t))),
+        int(round(_lerp(ag, bg, t))),
+        int(round(_lerp(ab, bb, t))),
+    )
 
 
 def _escape_xml(text: str) -> str:
@@ -70,6 +94,34 @@ def _room_fill_for_seconds(seconds: float, max_seconds: float, visited: bool) ->
         g = _lerp(200, 66, u)
         b = _lerp(72, 66, u)
     return _rgb_hex(int(r), int(g), int(b))
+
+
+def _spawner_color(mob_type: str) -> str:
+    mob = str(mob_type or "").strip().lower()
+    if mob == "cave_spider":
+        return "#53d8ff"
+    if mob == "spider":
+        return "#8cc4ff"
+    if mob == "zombie":
+        return "#7ed957"
+    if mob == "skeleton":
+        return "#e7ebf0"
+    return "#ffa44a"
+
+
+def _spawner_label(mob_type: str) -> str:
+    mob = str(mob_type or "").strip().lower()
+    if mob == "cave_spider":
+        return "CSP"
+    if mob == "spider":
+        return "SP"
+    if mob == "zombie":
+        return "Z"
+    if mob == "skeleton":
+        return "SK"
+    if not mob:
+        return "?"
+    return mob[:3].upper()
 
 
 def _room_icon_spec(room_type: str, *, is_wide: bool) -> dict[str, Any]:
@@ -268,6 +320,70 @@ def render_map_svg(
     visited_ids = set(room_seconds.keys())
     max_seconds = max(room_seconds.values()) if room_seconds else 0.0
     starter_id = int(starter.get("room_id", -1) or -1)
+    room_fill_by_id: dict[int, str] = {}
+    for room in rooms:
+        room_id = int(room["id"])
+        room_fill_by_id[room_id] = _room_fill_for_seconds(
+            float(room_seconds.get(room_id, 0.0)),
+            float(max_seconds),
+            room_id in visited_ids,
+        )
+
+    room_masks_raw = payload.get("room_masks", [])
+    room_masks: dict[int, dict[str, Any]] = {}
+    if isinstance(room_masks_raw, list):
+        for item in room_masks_raw:
+            if not isinstance(item, dict):
+                continue
+            rid = int(item.get("room_id", -1) or -1)
+            if rid < 0:
+                continue
+            runs: list[dict[str, float]] = []
+            raw_runs = item.get("runs", [])
+            if isinstance(raw_runs, list):
+                for run in raw_runs:
+                    if not isinstance(run, dict):
+                        continue
+                    try:
+                        runs.append(
+                            {
+                                "z": float(run.get("z")),
+                                "x0": float(run.get("x0")),
+                                "x1": float(run.get("x1")),
+                            }
+                        )
+                    except Exception:
+                        continue
+            room_masks[rid] = {
+                "runs": runs,
+                "fallback_bbox": bool(item.get("fallback_bbox", False)),
+                "scan_y0": int(item.get("scan_y0", 0) or 0),
+                "scan_y1": int(item.get("scan_y1", 0) or 0),
+            }
+
+    connection_polygons_raw = payload.get("connection_polygons", [])
+    connection_polygons: list[dict[str, Any]] = []
+    if isinstance(connection_polygons_raw, list):
+        for poly in connection_polygons_raw:
+            if not isinstance(poly, dict):
+                continue
+            try:
+                connection_polygons.append(
+                    {
+                        "a": int(poly.get("a", -1)),
+                        "b": int(poly.get("b", -1)),
+                        "axis": str(poly.get("axis", "")),
+                        "kind": str(poly.get("kind", "open")),
+                        "x0": float(poly.get("x0")),
+                        "x1": float(poly.get("x1")),
+                        "z0": float(poly.get("z0")),
+                        "z1": float(poly.get("z1")),
+                        "y": int(poly.get("y", 0) or 0),
+                    }
+                )
+            except Exception:
+                continue
+
     connections_raw = payload.get("connections", [])
     connections: list[dict[str, Any]] = []
     if isinstance(connections_raw, list):
@@ -325,6 +441,59 @@ def render_map_svg(
                 )
             except Exception:
                 continue
+    spawners_raw = payload.get("spawners", [])
+    spawners: list[dict[str, Any]] = []
+    if isinstance(spawners_raw, list):
+        for spawner in spawners_raw:
+            if not isinstance(spawner, dict):
+                continue
+            try:
+                spawners.append(
+                    {
+                        "x": float(spawner.get("x")),
+                        "y": int(spawner.get("y", 0) or 0),
+                        "z": float(spawner.get("z")),
+                        "mob_type": str(spawner.get("mob_type", "unknown")),
+                    }
+                )
+            except Exception:
+                continue
+    manual_aims: list[dict[str, Any]] = []
+    aims_raw = payload.get("manual_aims", [])
+    if isinstance(aims_raw, list):
+        for aim_raw in aims_raw:
+            if not isinstance(aim_raw, dict):
+                continue
+            try:
+                manual_aims.append(
+                    {
+                        "x": float(aim_raw.get("x")),
+                        "y": float(aim_raw.get("y")),
+                        "z": float(aim_raw.get("z")),
+                        "yaw": float(aim_raw.get("yaw")),
+                        "pitch": float(aim_raw.get("pitch", 0.0) or 0.0),
+                        "dim": str(aim_raw.get("dim", "")),
+                    }
+                )
+            except Exception:
+                continue
+    if not manual_aims:
+        # Backward compatibility with old payloads.
+        aim_raw = payload.get("manual_aim")
+        if isinstance(aim_raw, dict):
+            try:
+                manual_aims.append(
+                    {
+                        "x": float(aim_raw.get("x")),
+                        "y": float(aim_raw.get("y")),
+                        "z": float(aim_raw.get("z")),
+                        "yaw": float(aim_raw.get("yaw")),
+                        "pitch": float(aim_raw.get("pitch", 0.0) or 0.0),
+                        "dim": str(aim_raw.get("dim", "")),
+                    }
+                )
+            except Exception:
+                pass
 
     poly_points: list[tuple[float, float]] = []
     raw_path_points: list[dict[str, Any]] = []
@@ -352,8 +521,8 @@ def render_map_svg(
     title = f"Stronghold Topdown - {json_path.parent.parent.name}"
     subtitle = (
         f"Rooms: {len(rooms)} | Visited: {len(visited_ids)} | "
-        f"Starter(FiveWay): {starter_id} | Connections: {len(connections)} | Doors(oak/iron): {len(doors)} | "
-        f"Chests: {len(chests)} | Max room time: {max_seconds:.2f}s"
+        f"Starter(FiveWay): {starter_id} | Connections: {len(connection_polygons) if connection_polygons else len(connections)} | Doors(oak/iron): {len(doors)} | "
+        f"Chests: {len(chests)} | Spawners: {len(spawners)} | Max room time: {max_seconds:.2f}s"
     )
 
     lines: list[str] = []
@@ -369,7 +538,8 @@ def render_map_svg(
     lines.append("      .lbl { font: 600 11px Segoe UI, Arial, sans-serif; fill: #0b121c; }")
     lines.append("      .legend { font: 600 13px Segoe UI, Arial, sans-serif; fill: #d7ebff; }")
     lines.append("      .legendSmall { font: 400 12px Segoe UI, Arial, sans-serif; fill: #b8d5f0; }")
-    lines.append("      .keyTag { font: 700 12px Segoe UI, Arial, sans-serif; fill: #f4fbff; }")
+    lines.append("      .keyTag { font: 700 10px Segoe UI, Arial, sans-serif; fill: #f4fbff; }")
+    lines.append("      .spawnerTag { font: 700 9px Segoe UI, Arial, sans-serif; fill: #041019; }")
     lines.append("    </style>")
     lines.append("  </defs>")
     lines.append(f'  <rect x="0" y="0" width="{width}" height="{height}" fill="#071a2a"/>')
@@ -404,11 +574,37 @@ def render_map_svg(
         elif room["type"] == "FiveWayCrossing":
             stroke = "#78d6ff"
         stroke_w = "2.5" if room_id == starter_id else "1.1"
-        lines.append(
-            f'  <rect x="{rx:.2f}" y="{ry:.2f}" width="{rw:.2f}" height="{rh:.2f}" '
-            f'fill="{fill}" stroke="{stroke}" stroke-width="{stroke_w}">'
-            f"<title>#{room_id} {room['type']} | {secs:.2f}s</title></rect>"
-        )
+        mask_entry = room_masks.get(room_id)
+        mask_runs = list(mask_entry.get("runs", [])) if isinstance(mask_entry, dict) else []
+        has_mask_geometry = bool(mask_runs)
+        if has_mask_geometry:
+            for run in mask_runs:
+                rz = float(run.get("z", 0.0))
+                rx0_world = float(run.get("x0", 0.0))
+                rx1_world = float(run.get("x1", 0.0)) + 1.0
+                gx0 = sx(rx0_world)
+                gx1 = sx(rx1_world)
+                gy0 = sy(rz + 1.0)
+                gy1 = sy(rz)
+                grx = min(gx0, gx1)
+                gry = min(gy0, gy1)
+                grw = max(0.6, abs(gx1 - gx0))
+                grh = max(0.6, abs(gy1 - gy0))
+                lines.append(
+                    f'  <rect x="{grx:.2f}" y="{gry:.2f}" width="{grw:.2f}" height="{grh:.2f}" '
+                    f'fill="{fill}" stroke="none"></rect>'
+                )
+            lines.append(
+                f'  <rect x="{rx:.2f}" y="{ry:.2f}" width="{rw:.2f}" height="{rh:.2f}" '
+                f'fill="none" stroke="{stroke}" stroke-opacity="0.56" stroke-width="{stroke_w}">'
+                f"<title>#{room_id} {room['type']} | {secs:.2f}s</title></rect>"
+            )
+        else:
+            lines.append(
+                f'  <rect x="{rx:.2f}" y="{ry:.2f}" width="{rw:.2f}" height="{rh:.2f}" '
+                f'fill="{fill}" stroke="{stroke}" stroke-width="{stroke_w}">'
+                f"<title>#{room_id} {room['type']} | {secs:.2f}s</title></rect>"
+            )
 
         # Room glyphs: minimal icon per room type (kept subtle and unobtrusive).
         icon_size = min(rw, rh) * 0.62
@@ -496,32 +692,70 @@ def render_map_svg(
                 f'class="lbl">{_escape_xml(label)}</text>'
             )
 
-    # Draw actual detected room connections (including plain openings with no door blocks).
-    conn_half = max(1.0, min(4.0, scale * 0.40))
-    for conn in connections:
-        cx = sx(float(conn["x"]) + 0.5)
-        cz = sy(float(conn["z"]) + 0.5)
-        axis = str(conn.get("axis", ""))
-        kind = str(conn.get("kind", "open"))
-        if axis == "x":
-            x1, y1 = cx, cz - conn_half
-            x2, y2 = cx, cz + conn_half
-        elif axis == "z":
-            x1, y1 = cx - conn_half, cz
-            x2, y2 = cx + conn_half, cz
-        else:
-            x1, y1 = cx - conn_half * 0.8, cz - conn_half * 0.8
-            x2, y2 = cx + conn_half * 0.8, cz + conn_half * 0.8
-        color = "#9ee8ff" if kind == "open" else "#f0e5c8"
-        conn_title = _escape_xml(
-            f"connection {int(conn['a'])}<->{int(conn['b'])} ({kind}) @ "
-            f"{int(float(conn['x']))},{int(conn['y'])},{int(float(conn['z']))}"
-        )
-        lines.append(
-            f'  <line x1="{x1:.2f}" y1="{y1:.2f}" x2="{x2:.2f}" y2="{y2:.2f}" '
-            f'stroke="{color}" stroke-opacity="0.78" stroke-width="2.0" stroke-linecap="round">'
-            f"<title>{conn_title}</title></line>"
-        )
+    # Draw room-to-room passages as scanned connection polygons.
+    if connection_polygons:
+        for poly in connection_polygons:
+            px0 = sx(float(poly["x0"]))
+            px1 = sx(float(poly["x1"]))
+            py0 = sy(float(poly["z1"]))
+            py1 = sy(float(poly["z0"]))
+            prx = min(px0, px1)
+            pry = min(py0, py1)
+            prw = max(0.6, abs(px1 - px0))
+            prh = max(0.6, abs(py1 - py0))
+            kind = str(poly.get("kind", "open"))
+            a_id = int(poly.get("a", -1) or -1)
+            b_id = int(poly.get("b", -1) or -1)
+            a_fill = room_fill_by_id.get(a_id, "#1d2e40")
+            b_fill = room_fill_by_id.get(b_id, "#1d2e40")
+            fill = _blend_hex(a_fill, b_fill, 0.50)
+            stroke = _blend_hex(fill, "#ffffff", 0.18)
+            fill_opacity = "0.30"
+            stroke_opacity = "0.40"
+            stroke_dash = ' stroke-dasharray="2.2,1.8"' if kind == "door" else ""
+            conn_title = _escape_xml(
+                f"connection {int(poly['a'])}<->{int(poly['b'])} ({kind}) @ "
+                f"x[{float(poly['x0']):.2f},{float(poly['x1']):.2f}] "
+                f"z[{float(poly['z0']):.2f},{float(poly['z1']):.2f}] y={int(poly.get('y', 0))}"
+            )
+            lines.append(
+                f'  <rect x="{prx:.2f}" y="{pry:.2f}" width="{prw:.2f}" height="{prh:.2f}" '
+                f'fill="{fill}" fill-opacity="{fill_opacity}" stroke="{stroke}" stroke-opacity="{stroke_opacity}" '
+                f'stroke-width="0.9"{stroke_dash}>'
+                f"<title>{conn_title}</title></rect>"
+            )
+    else:
+        # Fallback for older payloads that only contain point connections.
+        conn_half = max(1.0, min(4.0, scale * 0.40))
+        for conn in connections:
+            cx = sx(float(conn["x"]) + 0.5)
+            cz = sy(float(conn["z"]) + 0.5)
+            axis = str(conn.get("axis", ""))
+            kind = str(conn.get("kind", "open"))
+            if axis == "x":
+                x1, y1 = cx, cz - conn_half
+                x2, y2 = cx, cz + conn_half
+            elif axis == "z":
+                x1, y1 = cx - conn_half, cz
+                x2, y2 = cx + conn_half, cz
+            else:
+                x1, y1 = cx - conn_half * 0.8, cz - conn_half * 0.8
+                x2, y2 = cx + conn_half * 0.8, cz + conn_half * 0.8
+            a_id = int(conn.get("a", -1) or -1)
+            b_id = int(conn.get("b", -1) or -1)
+            a_fill = room_fill_by_id.get(a_id, "#1d2e40")
+            b_fill = room_fill_by_id.get(b_id, "#1d2e40")
+            color = _blend_hex(a_fill, b_fill, 0.50)
+            dash = ' stroke-dasharray="2.2,1.8"' if kind == "door" else ""
+            conn_title = _escape_xml(
+                f"connection {int(conn['a'])}<->{int(conn['b'])} ({kind}) @ "
+                f"{int(float(conn['x']))},{int(conn['y'])},{int(float(conn['z']))}"
+            )
+            lines.append(
+                f'  <line x1="{x1:.2f}" y1="{y1:.2f}" x2="{x2:.2f}" y2="{y2:.2f}" '
+                f'stroke="{color}" stroke-opacity="0.50" stroke-width="1.6" stroke-linecap="round"{dash}>'
+                f"<title>{conn_title}</title></line>"
+            )
 
     # Draw actual door blocks from world scan (some room connections are just openings, so no marker).
     door_half = max(1.2, min(4.2, scale * 0.42))
@@ -569,6 +803,29 @@ def render_map_svg(
             f'width="{(2.0*chest_half):.2f}" height="{(2.0*chest_half):.2f}" '
             f'fill="{fill}" stroke="{stroke}" stroke-width="1.2">'
             f"<title>{chest_title}</title></rect>"
+        )
+
+    # Draw mob spawners (within stronghold bbox + 2 chunks).
+    spawner_r = max(2.2, min(5.0, scale * 0.28))
+    for spawner in spawners:
+        px = sx(float(spawner["x"]) + 0.5)
+        py = sy(float(spawner["z"]) + 0.5)
+        mob_type = str(spawner.get("mob_type", "unknown"))
+        mob_label = _spawner_label(mob_type)
+        fill = _spawner_color(mob_type)
+        stroke = _blend_hex(fill, "#000000", 0.52)
+        points = (
+            f"{px:.2f},{(py-spawner_r):.2f} "
+            f"{(px+spawner_r):.2f},{py:.2f} "
+            f"{px:.2f},{(py+spawner_r):.2f} "
+            f"{(px-spawner_r):.2f},{py:.2f}"
+        )
+        lines.append(
+            f'  <polygon points="{points}" fill="{fill}" stroke="{stroke}" stroke-width="1.0">'
+            f"<title>spawner: {mob_type} @ {int(float(spawner['x']))},{int(spawner['y'])},{int(float(spawner['z']))}</title></polygon>"
+        )
+        lines.append(
+            f'  <text x="{(px+spawner_r+2.4):.2f}" y="{(py-0.8):.2f}" class="spawnerTag">{_escape_xml(mob_label)}</text>'
         )
 
     # Draw path
@@ -624,16 +881,44 @@ def render_map_svg(
             "<title>Path end</title></circle>"
         )
 
+    # Draw manual orientation rays captured from F3+C clipboard command.
+    if manual_aims:
+        ray_len = max(48.0, max(span_x, span_z) * 0.85)
+        total = len(manual_aims)
+        for idx, manual_aim in enumerate(manual_aims):
+            ax_world = float(manual_aim["x"])
+            az_world = float(manual_aim["z"])
+            yaw = float(manual_aim["yaw"])
+            # Minecraft yaw: 0=south(+Z), 90=west(-X), 180=north(-Z), -90=east(+X)
+            rad = math.radians(yaw)
+            dir_x = -math.sin(rad)
+            dir_z = math.cos(rad)
+            bx_world = ax_world + (dir_x * ray_len)
+            bz_world = az_world + (dir_z * ray_len)
+            ax = sx(ax_world)
+            ay = sy(az_world)
+            bx = sx(bx_world)
+            by = sy(bz_world)
+            # Older rays are more transparent; newest ray is strongest.
+            t = float(idx + 1) / float(max(1, total))
+            opacity = _lerp(0.28, 0.96, t)
+            stroke_w = _lerp(1.6, 2.8, t)
+            dot_r = _lerp(3.2, 4.8, t)
+            lines.append(
+                f'  <line x1="{ax:.2f}" y1="{ay:.2f}" x2="{bx:.2f}" y2="{by:.2f}" '
+                f'stroke="#ff9f2f" stroke-opacity="{opacity:.2f}" stroke-width="{stroke_w:.2f}" stroke-linecap="round">'
+                f"<title>manual aim ray {idx+1}/{total} | yaw={yaw:.2f} pitch={float(manual_aim['pitch']):.2f}</title></line>"
+            )
+            lines.append(
+                f'  <circle cx="{ax:.2f}" cy="{ay:.2f}" r="{dot_r:.2f}" fill="#ff9f2f" '
+                f'stroke="#4a2a05" stroke-width="1.0" fill-opacity="{opacity:.2f}">'
+                f"<title>manual aim origin {idx+1}/{total} | x={ax_world:.2f} z={az_world:.2f}</title></circle>"
+            )
+
     # Key room labels.
     key_labels: list[tuple[int, str]] = []
     if starter_id >= 0:
-        starter_type = "Unknown"
-        for room in rooms:
-            if int(room["id"]) == starter_id:
-                starter_type = str(room["type"])
-                break
-        starter_label = "Starter 5-Way" if starter_type == "FiveWayCrossing" else "Starter"
-        key_labels.append((starter_id, starter_label))
+        key_labels.append((starter_id, "Starter"))
     for room in rooms:
         room_id = int(room["id"])
         room_type = str(room["type"])
@@ -660,9 +945,9 @@ def render_map_svg(
         rw = max(1.0, abs(sx(target["max_x"]) - sx(target["min_x"])))
         tag_x = rx + 4.0
         tag_y = max(margin + header + 14.0, ry + 14.0)
-        pad_x = 5.0
-        tag_w = (len(label) * 7.0) + 2.0 * pad_x
-        tag_h = 18.0
+        pad_x = 4.0
+        tag_w = (len(label) * 6.2) + 2.0 * pad_x
+        tag_h = 16.0
         lines.append(
             f'  <rect x="{tag_x:.2f}" y="{(tag_y-tag_h+3):.2f}" width="{tag_w:.2f}" height="{tag_h:.2f}" '
             f'rx="4" fill="#0b1826" fill-opacity="0.92" stroke="#8ecdf8" stroke-width="0.8"/>'
@@ -673,8 +958,9 @@ def render_map_svg(
 
     # Subtle chunk grid overlay (16x16 blocks) on top layer.
     chunk_stroke = "#88b1d6"
-    chunk_opacity = "0.16"
+    chunk_opacity = "0.50"
     chunk_dash = "1.5,5.0"
+    chunk_width = "1.2"
     x_chunk_start = int(min_x) // 16
     x_chunk_end = int(max_x) // 16
     z_chunk_start = int(min_z) // 16
@@ -684,7 +970,7 @@ def render_map_svg(
         lx = sx(wx)
         lines.append(
             f'  <line x1="{lx:.2f}" y1="{(margin+header):.2f}" x2="{lx:.2f}" y2="{(margin+header+map_h):.2f}" '
-            f'stroke="{chunk_stroke}" stroke-opacity="{chunk_opacity}" stroke-width="0.9" '
+            f'stroke="{chunk_stroke}" stroke-opacity="{chunk_opacity}" stroke-width="{chunk_width}" '
             f'stroke-dasharray="{chunk_dash}" />'
         )
     for cz in range(z_chunk_start, z_chunk_end + 2):
@@ -692,7 +978,7 @@ def render_map_svg(
         ly = sy(wz)
         lines.append(
             f'  <line x1="{margin:.2f}" y1="{ly:.2f}" x2="{(margin+map_w):.2f}" y2="{ly:.2f}" '
-            f'stroke="{chunk_stroke}" stroke-opacity="{chunk_opacity}" stroke-width="0.9" '
+            f'stroke="{chunk_stroke}" stroke-opacity="{chunk_opacity}" stroke-width="{chunk_width}" '
             f'stroke-dasharray="{chunk_dash}" />'
         )
 

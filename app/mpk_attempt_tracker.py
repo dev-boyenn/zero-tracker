@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+import json
 from pathlib import Path
 import re
+import subprocess
+import sys
 import time
 from typing import Any
 
-from config import MAJOR_DAMAGE_THRESHOLD
+from config import MAJOR_DAMAGE_THRESHOLD, PROJECT_ROOT
 from scripts.parse_command_storage import (
     bedrock_by_node,
     dominant_node_from_storage,
@@ -60,6 +63,7 @@ class MpkAttemptTracker:
         self.storage_wait_seconds = storage_wait_seconds
         self.state_last_world_key = "mpk.last_ingested_world"
         self.state_active_world_key = "mpk.active_world_name"
+        self.state_retry_world_key = "mpk.ingest.retry_world_name"
         self.last_seen_exit_event_id = 0
         self.world_create_re = re.compile(
             r'^Creating "(?P<world>.+)"(?: with seed "(?P<seed>[-\d]+)")?\.\.\.$'
@@ -215,6 +219,13 @@ class MpkAttemptTracker:
         self.db.set_state("mpk.ingest.last_world", world_name)
         self.db.set_state("mpk.ingest.last_detail", detail)
 
+    def _set_retry_world(self, world_name: str | None) -> None:
+        value = (world_name or "").strip()
+        self.db.set_state(self.state_retry_world_key, value)
+
+    def _get_retry_world(self) -> str:
+        return (self.db.get_state(self.state_retry_world_key, "") or "").strip()
+
     def _is_world_exit_line(self, body: str) -> bool:
         # Language-agnostic / forced markers only.
         if body == "Stopping!":
@@ -333,6 +344,10 @@ class MpkAttemptTracker:
         return sum(1 for ev in mapped_events if str(ev.get("source", "other")) in explosive_sources)
 
     def _metrics_look_uninitialized(self, metrics: dict[str, Any]) -> bool:
+        stronghold_samples_raw = metrics.get("stronghold_samples", [])
+        if isinstance(stronghold_samples_raw, list) and len(stronghold_samples_raw) > 0:
+            # Stronghold-only runs can be valid even when End-fight counters are absent.
+            return False
         run_start_gt = int(metrics.get("run_start_gt", 0) or 0)
         run_end_gt = int(metrics.get("run_end_gt", 0) or 0)
         sample_count = int(metrics.get("sample_count", 0) or 0)
@@ -350,30 +365,397 @@ class MpkAttemptTracker:
             and anchors_exploded_est <= 0
         )
 
+    def _extract_stronghold_samples(self, metrics: dict[str, Any]) -> list[dict[str, int]]:
+        stronghold_samples_raw = metrics.get("stronghold_samples", [])
+        stronghold_samples: list[dict[str, int]] = []
+        if not isinstance(stronghold_samples_raw, list):
+            return stronghold_samples
+        for item in stronghold_samples_raw:
+            if not isinstance(item, dict):
+                continue
+            stronghold_samples.append(
+                {
+                    "gt": int(item.get("gt", 0) or 0),
+                    "x": int(item.get("x", 0) or 0),
+                    "y": int(item.get("y", 0) or 0),
+                    "z": int(item.get("z", 0) or 0),
+                    "dim": int(item.get("dim", 0) or 0),
+                }
+            )
+        return stronghold_samples
+
+    def _world_output_stem(self, world_name: str) -> str:
+        match = re.search(r"#(\d+)", str(world_name))
+        if match:
+            return match.group(1)
+        invalid = '<>:"/\\|?*'
+        cleaned = "".join("_" if ch in invalid else ch for ch in str(world_name))
+        cleaned = cleaned.strip().strip(".")
+        if not cleaned:
+            cleaned = "world"
+        return cleaned.replace(" ", "_")
+
+    def _analyze_stronghold_world(self, *, world: Path, attempt_id: int) -> None:
+        stronghold_maps_dir = PROJECT_ROOT / "data" / "stronghold_maps"
+        stronghold_maps_dir.mkdir(parents=True, exist_ok=True)
+        out_stem = self._world_output_stem(world.name)
+        out_json = stronghold_maps_dir / f"{out_stem}.json"
+        analyzer_path = PROJECT_ROOT / "scripts" / "analyze_stronghold_world.py"
+        if not analyzer_path.exists():
+            self.db.set_state("mpk.stronghold.last_error", f"Analyzer missing: {analyzer_path}")
+            return
+
+        cmd = [
+            sys.executable,
+            str(analyzer_path),
+            str(world),
+            "--out",
+            str(out_json),
+        ]
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        output = (proc.stdout or "").strip()
+        if proc.stderr:
+            stderr = proc.stderr.strip()
+            output = f"{output}\n{stderr}".strip()
+        self.db.set_state("mpk.stronghold.last_output", output[:5000] if output else "")
+        if int(proc.returncode) != 0:
+            self.db.set_state(
+                "mpk.stronghold.last_error",
+                f"analyze_stronghold_world failed ({proc.returncode}) for {world.name}",
+            )
+            return
+        if not out_json.exists():
+            self.db.set_state(
+                "mpk.stronghold.last_error",
+                f"analysis succeeded but output missing: {out_json}",
+            )
+            return
+
+        try:
+            payload = json.loads(out_json.read_text(encoding="utf-8"))
+        except Exception as exc:
+            self.db.set_state("mpk.stronghold.last_error", f"Failed to parse {out_json.name}: {exc}")
+            return
+
+        starter = payload.get("starter", {}) if isinstance(payload, dict) else {}
+        sample_stats = payload.get("sample_stats", {}) if isinstance(payload, dict) else {}
+        optimal_nav = payload.get("optimal_nav", {}) if isinstance(payload, dict) else {}
+        visits_raw = payload.get("visits", []) if isinstance(payload, dict) else []
+        visits = visits_raw if isinstance(visits_raw, list) else []
+
+        portal_entered = any(
+            isinstance(v, dict) and str(v.get("room_type", "")) == "PortalRoom"
+            for v in visits
+        )
+        nav_enter_gts: list[int] = []
+        nav_exit_gts: list[int] = []
+        for visit in visits:
+            if not isinstance(visit, dict):
+                continue
+            enter_gt = int(visit.get("enter_gt", 0) or 0)
+            exit_gt = int(visit.get("exit_gt", 0) or 0)
+            if enter_gt > 0:
+                nav_enter_gts.append(enter_gt)
+            if exit_gt > 0:
+                nav_exit_gts.append(exit_gt)
+        nav_ticks_fallback = 0
+        if nav_enter_gts and nav_exit_gts:
+            nav_start_gt = min(nav_enter_gts)
+            nav_end_gt = max(nav_exit_gts)
+            if nav_end_gt > nav_start_gt:
+                nav_ticks_fallback = int(nav_end_gt - nav_start_gt)
+        nav_seconds_fallback = (float(nav_ticks_fallback) / 20.0) if nav_ticks_fallback > 0 else 0.0
+
+        existing_nav = self.db.query_one(
+            "SELECT stronghold_nav_ticks, stronghold_nav_seconds FROM attempts WHERE id = ?",
+            (attempt_id,),
+        )
+        existing_nav_ticks = (
+            int(existing_nav["stronghold_nav_ticks"] or 0)
+            if existing_nav is not None and existing_nav["stronghold_nav_ticks"] is not None
+            else 0
+        )
+        existing_nav_seconds = (
+            float(existing_nav["stronghold_nav_seconds"] or 0.0)
+            if existing_nav is not None and existing_nav["stronghold_nav_seconds"] is not None
+            else 0.0
+        )
+        nav_ticks_final = existing_nav_ticks if existing_nav_ticks > 0 else nav_ticks_fallback
+        nav_seconds_final = (
+            existing_nav_seconds if existing_nav_seconds > 0 else nav_seconds_fallback
+        )
+        room_ticks: list[int] = []
+        room_seconds: list[float] = []
+        for visit in visits:
+            if not isinstance(visit, dict):
+                continue
+            ticks = int(visit.get("duration_ticks", 0) or 0)
+            seconds = float(visit.get("duration_seconds", 0.0) or 0.0)
+            if ticks > 0:
+                room_ticks.append(ticks)
+            if seconds > 0:
+                room_seconds.append(seconds)
+        avg_room_ticks = (
+            (sum(room_ticks) / float(len(room_ticks))) if room_ticks else None
+        )
+        avg_room_seconds = (
+            (sum(room_seconds) / float(len(room_seconds))) if room_seconds else None
+        )
+
+        rooms_entered = int(sample_stats.get("mapped_rooms", 0) or 0)
+        starter_ticks = int(starter.get("ticks", 0) or 0)
+        starter_seconds = float(starter.get("seconds", 0.0) or 0.0)
+        # Keep room-delta comparable to optimal-nav: count visited unique rooms
+        # from the same starter room used by optimal-nav through first portal entry.
+        comparable_rooms_entered = None
+        try:
+            starter_room_id = int(optimal_nav.get("starter_room_id", -1) or -1)
+        except Exception:
+            starter_room_id = -1
+        if visits:
+            starter_idx = 0
+            if starter_room_id >= 0:
+                for idx, visit in enumerate(visits):
+                    if not isinstance(visit, dict):
+                        continue
+                    if int(visit.get("room_id", -1) or -1) == starter_room_id:
+                        starter_idx = idx
+                        break
+            portal_idx = None
+            for idx in range(starter_idx, len(visits)):
+                visit = visits[idx]
+                if not isinstance(visit, dict):
+                    continue
+                if str(visit.get("room_type", "")) == "PortalRoom":
+                    portal_idx = idx
+                    break
+            end_idx = portal_idx + 1 if portal_idx is not None else len(visits)
+            room_ids: set[int] = set()
+            for visit in visits[starter_idx:end_idx]:
+                if not isinstance(visit, dict):
+                    continue
+                room_id = int(visit.get("room_id", -1) or -1)
+                if room_id >= 0:
+                    room_ids.add(room_id)
+            if room_ids:
+                comparable_rooms_entered = len(room_ids)
+        optimal_rooms = None
+        optimal_edges = None
+        room_delta = None
+        if bool(optimal_nav.get("reachable", False)):
+            optimal_rooms_raw = optimal_nav.get("min_rooms", None)
+            optimal_edges_raw = optimal_nav.get("min_edges", None)
+            if optimal_rooms_raw is not None:
+                optimal_rooms = int(optimal_rooms_raw)
+            if optimal_edges_raw is not None:
+                optimal_edges = int(optimal_edges_raw)
+            rooms_for_delta = (
+                int(comparable_rooms_entered)
+                if comparable_rooms_entered is not None
+                else int(rooms_entered)
+            )
+            if optimal_rooms is not None and rooms_for_delta > 0:
+                room_delta = int(rooms_for_delta - optimal_rooms)
+
+        out_svg = out_json.with_suffix(".svg")
+        json_path_str = str(out_json)
+        svg_path_str = str(out_svg) if out_svg.exists() else None
+        self.db.execute(
+            """
+            UPDATE attempts
+            SET
+                stronghold_nav_ticks = ?,
+                stronghold_nav_seconds = ?,
+                stronghold_rooms_entered = ?,
+                stronghold_starter_ticks = ?,
+                stronghold_starter_seconds = ?,
+                stronghold_avg_room_ticks = ?,
+                stronghold_avg_room_seconds = ?,
+                stronghold_portal_room_entered = ?,
+                stronghold_optimal_rooms = ?,
+                stronghold_optimal_edges = ?,
+                stronghold_room_delta = ?,
+                stronghold_map_json_path = ?,
+                stronghold_map_svg_path = ?
+            WHERE id = ?
+            """,
+            (
+                nav_ticks_final if nav_ticks_final > 0 else None,
+                nav_seconds_final if nav_seconds_final > 0 else None,
+                rooms_entered if rooms_entered > 0 else None,
+                starter_ticks if starter_ticks > 0 else None,
+                starter_seconds if starter_seconds > 0 else None,
+                avg_room_ticks,
+                avg_room_seconds,
+                1 if portal_entered else 0,
+                optimal_rooms,
+                optimal_edges,
+                room_delta,
+                json_path_str,
+                svg_path_str,
+                attempt_id,
+            ),
+        )
+        self.db.set_state("mpk.stronghold.last_error", "")
+
+    def _backfill_existing_stronghold_attempt(
+        self,
+        *,
+        attempt_id: int,
+        world: Path,
+        storage_path: Path,
+        storage_fingerprint: str,
+    ) -> bool:
+        metrics = run_metrics_from_storage(storage_path)
+        if self._metrics_look_uninitialized(metrics):
+            retry_deadline = time.time() + 8.0
+            while time.time() < retry_deadline:
+                time.sleep(0.4)
+                refreshed = run_metrics_from_storage(storage_path)
+                if not self._metrics_look_uninitialized(refreshed):
+                    metrics = refreshed
+                    break
+        stronghold_samples = self._extract_stronghold_samples(metrics)
+        if not stronghold_samples:
+            return False
+
+        stronghold_eye_spy_gt = int(metrics.get("stronghold_eye_spy_gt", 0) or 0)
+        stronghold_end_enter_gt = int(metrics.get("stronghold_end_enter_gt", 0) or 0)
+        stronghold_nav_ticks = int(metrics.get("stronghold_nav_ticks", 0) or 0)
+        stronghold_nav_seconds = float(metrics.get("stronghold_nav_seconds", 0.0) or 0.0)
+        now_utc = utc_now()
+
+        self.db.execute("DELETE FROM stronghold_samples WHERE attempt_id = ?", (attempt_id,))
+        for sample_idx, sample in enumerate(stronghold_samples):
+            self.db.execute(
+                """
+                INSERT INTO stronghold_samples (
+                    attempt_id,
+                    sample_index,
+                    gt,
+                    x,
+                    y,
+                    z,
+                    dim,
+                    created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    attempt_id,
+                    sample_idx,
+                    int(sample.get("gt", 0) or 0),
+                    int(sample.get("x", 0) or 0),
+                    int(sample.get("y", 0) or 0),
+                    int(sample.get("z", 0) or 0),
+                    int(sample.get("dim", 0) or 0),
+                    now_utc,
+                ),
+            )
+
+        self.db.execute(
+            """
+            UPDATE attempts
+            SET
+                storage_fingerprint = ?,
+                stronghold_sample_count = ?,
+                stronghold_eye_spy_gt = ?,
+                stronghold_end_enter_gt = ?,
+                stronghold_nav_ticks = ?,
+                stronghold_nav_seconds = ?
+            WHERE id = ?
+            """,
+            (
+                storage_fingerprint or None,
+                len(stronghold_samples),
+                stronghold_eye_spy_gt if stronghold_eye_spy_gt > 0 else None,
+                stronghold_end_enter_gt if stronghold_end_enter_gt > 0 else None,
+                stronghold_nav_ticks if stronghold_nav_ticks > 0 else None,
+                stronghold_nav_seconds if stronghold_nav_seconds > 0 else None,
+                attempt_id,
+            ),
+        )
+        try:
+            self._analyze_stronghold_world(world=world, attempt_id=attempt_id)
+        except Exception as exc:
+            self.db.set_state(
+                "mpk.stronghold.last_error",
+                f"Unexpected stronghold re-analyze failure for {world.name}: {exc}",
+            )
+        return True
+
     def _ingest_latest_world(self, *, event_id: int, clock_time: str | None) -> None:
-        world = self._find_world_for_ingest()
+        retry_world_name = self._get_retry_world()
+        if retry_world_name:
+            retry_world = self.saves_dir / retry_world_name
+            if retry_world.exists() and retry_world.is_dir():
+                world = retry_world
+            else:
+                self._set_retry_world("")
+                world = self._find_world_for_ingest()
+        else:
+            world = self._find_world_for_ingest()
         if world is None:
             self._set_ingest_diag(reason="no_world")
             return
         world_name = world.name
-        if world_name == (self.db.get_state(self.state_last_world_key, "") or ""):
-            self._set_ingest_diag(reason="duplicate_world", world_name=world_name)
-            return
-        existing = self.db.query_one(
-            "SELECT id FROM attempts WHERE attempt_source = 'mpk' AND world_name = ? LIMIT 1",
-            (world_name,),
-        )
-        if existing is not None:
-            self.db.set_state(self.state_last_world_key, world_name)
-            self._set_ingest_diag(reason="already_inserted", world_name=world_name)
-            return
 
         storage_path = self._find_storage_file(world / "data")
         if storage_path is None:
+            self._set_retry_world(world_name)
             self._set_ingest_diag(reason="no_storage", world_name=world_name)
             return
         if not self._wait_for_storage(storage_path):
+            self._set_retry_world(world_name)
             self._set_ingest_diag(reason="storage_not_ready", world_name=world_name)
+            return
+        try:
+            stat = storage_path.stat()
+            storage_fingerprint = f"{int(stat.st_mtime_ns)}:{int(stat.st_size)}"
+        except Exception:
+            storage_fingerprint = ""
+        existing = self.db.query_one(
+            """
+            SELECT id, COALESCE(stronghold_sample_count, 0) AS stronghold_sample_count
+            FROM attempts
+            WHERE attempt_source = 'mpk'
+              AND world_name = ?
+              AND COALESCE(storage_fingerprint, '') = ?
+            LIMIT 1
+            """,
+            (world_name, storage_fingerprint),
+        )
+        if existing is not None:
+            existing_attempt_id = int(existing["id"])
+            existing_stronghold_count = int(existing["stronghold_sample_count"] or 0)
+            if existing_stronghold_count <= 0:
+                if self._backfill_existing_stronghold_attempt(
+                    attempt_id=existing_attempt_id,
+                    world=world,
+                    storage_path=storage_path,
+                    storage_fingerprint=storage_fingerprint,
+                ):
+                    self._set_retry_world("")
+                    self.db.set_state(self.state_last_world_key, world_name)
+                    self._set_ingest_diag(
+                        reason="rehydrated_existing_stronghold",
+                        world_name=world_name,
+                        detail=f"attempt_id={existing_attempt_id}, stronghold_samples>0",
+                    )
+                    return
+            self.db.set_state(self.state_last_world_key, world_name)
+            self._set_retry_world("")
+            self._set_ingest_diag(
+                reason="already_inserted",
+                world_name=world_name,
+                detail=f"fingerprint={storage_fingerprint}",
+            )
             return
 
         node, _ = dominant_node_from_storage(storage_path, window_ticks=self.window_ticks)
@@ -388,6 +770,7 @@ class MpkAttemptTracker:
                     metrics = refreshed
                     break
         if self._metrics_look_uninitialized(metrics):
+            self._set_retry_world(world_name)
             self._set_ingest_diag(reason="uninitialized_storage_snapshot", world_name=world_name)
             return
         bedrock = bedrock_by_node(world, radius=self.bedrock_radius)
@@ -428,8 +811,23 @@ class MpkAttemptTracker:
         end_entry_logged = bool(metrics.get("end_entry_logged", False))
         end_entry_gt = int(metrics.get("end_entry_gt", 0) or 0)
         end_ticks = (final_gt - end_entry_gt) if end_entry_logged and final_gt > end_entry_gt else 0
-        if end_ticks < self.MIN_END_TICKS_FOR_ATTEMPT:
-            # Ignore short End visits; caller asked to only count real attempts.
+        stronghold_samples = self._extract_stronghold_samples(metrics)
+        if not stronghold_samples:
+            # Storage sometimes lags a little behind world-exit; give stronghold
+            # samples a short additional window before finalizing insertion.
+            retry_deadline = time.time() + 6.0
+            while time.time() < retry_deadline:
+                time.sleep(0.3)
+                refreshed = run_metrics_from_storage(storage_path)
+                refreshed_samples = self._extract_stronghold_samples(refreshed)
+                if refreshed_samples:
+                    metrics = refreshed
+                    stronghold_samples = refreshed_samples
+                    break
+        stronghold_sample_count = len(stronghold_samples)
+        zero_attempt_eligible = 1 if end_ticks >= self.MIN_END_TICKS_FOR_ATTEMPT else 0
+        if zero_attempt_eligible == 0 and stronghold_sample_count <= 0:
+            # Skip worlds that are neither valid zero attempts nor stronghold-tracked attempts.
             self._set_ingest_diag(
                 reason="min_end_ticks_not_met",
                 world_name=world_name,
@@ -471,22 +869,6 @@ class MpkAttemptTracker:
         stronghold_end_enter_gt = int(metrics.get("stronghold_end_enter_gt", 0) or 0)
         stronghold_nav_ticks = int(metrics.get("stronghold_nav_ticks", 0) or 0)
         stronghold_nav_seconds = float(metrics.get("stronghold_nav_seconds", 0.0) or 0.0)
-        stronghold_samples_raw = metrics.get("stronghold_samples", [])
-        stronghold_samples: list[dict[str, int]] = []
-        if isinstance(stronghold_samples_raw, list):
-            for item in stronghold_samples_raw:
-                if not isinstance(item, dict):
-                    continue
-                stronghold_samples.append(
-                    {
-                        "gt": int(item.get("gt", 0) or 0),
-                        "x": int(item.get("x", 0) or 0),
-                        "y": int(item.get("y", 0) or 0),
-                        "z": int(item.get("z", 0) or 0),
-                        "dim": int(item.get("dim", 0) or 0),
-                    }
-                )
-        stronghold_sample_count = len(stronghold_samples)
         explosive_standing_y_raw = metrics.get("explosive_standing_y", None)
         explosive_standing_y = int(explosive_standing_y_raw) if explosive_standing_y_raw is not None else None
         o_level = None
@@ -540,6 +922,8 @@ class MpkAttemptTracker:
                 flyaway_crystals_alive,
                 world_name,
                 world_seed,
+                storage_fingerprint,
+                zero_attempt_eligible,
                 stronghold_eye_spy_gt,
                 stronghold_end_enter_gt,
                 stronghold_nav_ticks,
@@ -550,10 +934,10 @@ class MpkAttemptTracker:
                 stronghold_starter_seconds,
                 created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, 'mpk', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, 'mpk', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                event_id,
+                event_id if event_id > 0 else None,
                 started_at_utc,
                 clock_time,
                 ended_at_utc,
@@ -589,6 +973,8 @@ class MpkAttemptTracker:
                 flyaway_crystals_alive if flyaway_crystals_alive >= 0 else None,
                 world_name,
                 int(world_seed) if world_seed is not None else None,
+                storage_fingerprint or None,
+                zero_attempt_eligible,
                 stronghold_eye_spy_gt if stronghold_eye_spy_gt > 0 else None,
                 stronghold_end_enter_gt if stronghold_end_enter_gt > 0 else None,
                 stronghold_nav_ticks if stronghold_nav_ticks > 0 else None,
@@ -662,5 +1048,19 @@ class MpkAttemptTracker:
                 ),
             )
 
+        if stronghold_sample_count > 0:
+            try:
+                self._analyze_stronghold_world(world=world, attempt_id=attempt_id)
+            except Exception as exc:
+                self.db.set_state(
+                    "mpk.stronghold.last_error",
+                    f"Unexpected stronghold analyze failure for {world_name}: {exc}",
+                )
+
         self.db.set_state(self.state_last_world_key, world_name)
-        self._set_ingest_diag(reason="inserted", world_name=world_name)
+        self._set_retry_world("")
+        self._set_ingest_diag(
+            reason="inserted" if zero_attempt_eligible else "inserted_stronghold_only",
+            world_name=world_name,
+            detail=f"end_ticks={end_ticks}, stronghold_samples={stronghold_sample_count}, zero_eligible={zero_attempt_eligible}",
+        )

@@ -32,6 +32,7 @@ let weakLockSkipRequestInFlight = false;
 let weakLockToOpenRequestInFlight = false;
 let thresholdTooltipEl = null;
 let mpkSetupEditLock = false;
+let lastSeenLatestAttemptId = null;
 let lastWeakLockState = {
   lockActive: false,
   targetKey: "",
@@ -1702,6 +1703,14 @@ function renderAttemptTable(rows) {
     const retryTargetKey = String(row.retry_target_key || "").trim();
     const canRetry =
       String(row.attempt_source || "").toLowerCase() === "mpk" && retryTargetKey.startsWith("mpk|");
+    const strongholdDetailUrl = String(row.stronghold_detail_url || "").trim();
+    const hasStrongholdData = !!row.has_stronghold_data;
+    const hasStrongholdMap = !!row.stronghold_has_map;
+    const strongholdCell = hasStrongholdData
+      ? `<a class="inline-link" href="${escapeHtmlAttr(
+          strongholdDetailUrl || `/stronghold/${row.id}`
+        )}">${hasStrongholdMap ? "View" : "Tracked"}</a>`
+      : "-";
     const retryCell = canRetry
       ? `<button type="button" class="attempt-retry-btn" data-target-key="${escapeHtmlAttr(retryTargetKey)}"${
           lockRequestInFlight ? " disabled" : ""
@@ -1730,6 +1739,7 @@ function renderAttemptTable(rows) {
       <td>${row.id}</td>
       <td title="${fullStartedAt}">${relativeStartedAt}</td>
       <td>${String(row.attempt_source || "practice").toUpperCase()}</td>
+      <td>${strongholdCell}</td>
       <td class="status-${row.status}">${statusLabel}</td>
       <td>${row.tower_name || "Unknown"}</td>
       <td>${sideFromType(row.zero_type)}</td>
@@ -2024,10 +2034,39 @@ async function refresh(detail = "full") {
     const health = await healthRes.json();
     lastHealth = health;
     renderMpkSetupCard(health);
-    const payload = await dashboardRes.json();
+    let payload = await dashboardRes.json();
     if (requestSeq !== refreshRequestSeq) {
       return;
     }
+    const incomingLatestAttemptId = Number(payload.latest_attempt_id || 0);
+    if (detail === "light") {
+      const knownLatestAttemptId =
+        lastSeenLatestAttemptId === null ? null : Number(lastSeenLatestAttemptId);
+      if (
+        knownLatestAttemptId !== null &&
+        Number.isFinite(knownLatestAttemptId) &&
+        knownLatestAttemptId === incomingLatestAttemptId
+      ) {
+        const healthDot = document.getElementById("healthDot");
+        const healthText = document.getElementById("healthText");
+        const mpkAlive = !!(health.ok && health.mpk_enabled && health.mpk_log_exists);
+        const alive = mpkAlive;
+        healthDot.className = `dot ${alive ? "dot-on" : "dot-off"}`;
+        healthText.textContent = alive ? "Reader active" : "Log path not found";
+        const watchLabel = health.mpk_log_path;
+        setText(
+          "lastUpdated",
+          `Updated ${new Date(payload.server_time_utc).toLocaleTimeString()} | Watching: ${watchLabel}`
+        );
+        return;
+      }
+      const fullRes = await fetch(buildDashboardUrl("full"));
+      payload = await fullRes.json();
+      if (requestSeq !== refreshRequestSeq) {
+        return;
+      }
+    }
+    lastSeenLatestAttemptId = Number(payload.latest_attempt_id || 0);
 
     renderPayload(payload);
 
@@ -2074,9 +2113,8 @@ async function refreshHealth() {
   }
 }
 
-refresh("light");
 refresh("full");
-setInterval(() => refresh("full"), 2000);
+setInterval(() => refresh("light"), 2000);
 refreshHealth();
 setInterval(refreshHealth, 5000);
 ensureFilterDefaults();

@@ -1222,6 +1222,9 @@ def _scope_where(
 ) -> tuple[str, list[Any]]:
     clauses: list[str] = []
     params: list[Any] = []
+    # Zero dashboard should ignore runs that were inserted only for stronghold
+    # tracking when minimum End ticks were not met.
+    clauses.append("COALESCE(zero_attempt_eligible, 1) = 1")
 
     if zero_type is not None:
         clauses.append("COALESCE(zero_type, 'Unknown') = ?")
@@ -2338,7 +2341,9 @@ def compute_recent_attempts(
             flyaway_gt,
             flyaway_dragon_y,
             flyaway_node,
-            flyaway_crystals_alive
+            flyaway_crystals_alive,
+            stronghold_sample_count,
+            stronghold_map_svg_path
         FROM attempts
         {where}
         ORDER BY id DESC
@@ -2372,6 +2377,9 @@ def compute_recent_attempts(
         )
         o_level = _safe_int(row["o_level"]) if row["o_level"] is not None else None
         tower_name_value = str(row["tower_name"] or "Unknown")
+        stronghold_sample_count = _safe_int(row["stronghold_sample_count"])
+        stronghold_has_map = bool(str(row["stronghold_map_svg_path"] or "").strip())
+        has_stronghold_data = stronghold_sample_count > 0
         retry_target_key = None
         if (
             str(row["attempt_source"] or "practice").lower() == "mpk"
@@ -2426,6 +2434,12 @@ def compute_recent_attempts(
                 "flyaway_node": str(row["flyaway_node"] or ""),
                 "flyaway_crystals_alive": _safe_int(row["flyaway_crystals_alive"])
                 if row["flyaway_crystals_alive"] is not None
+                else None,
+                "stronghold_sample_count": stronghold_sample_count,
+                "has_stronghold_data": has_stronghold_data,
+                "stronghold_has_map": stronghold_has_map,
+                "stronghold_detail_url": f"/stronghold/{_safe_int(row['id'])}"
+                if has_stronghold_data
                 else None,
             }
         )
