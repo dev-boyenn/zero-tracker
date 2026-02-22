@@ -64,6 +64,7 @@ class MpkAttemptTracker:
         self.state_last_world_key = "mpk.last_ingested_world"
         self.state_active_world_key = "mpk.active_world_name"
         self.state_retry_world_key = "mpk.ingest.retry_world_name"
+        self.state_retry_count_key = "mpk.ingest.retry_count"
         self.last_seen_exit_event_id = 0
         self.world_create_re = re.compile(
             r'^Creating "(?P<world>.+)"(?: with seed "(?P<seed>[-\d]+)")?\.\.\.$'
@@ -221,10 +222,35 @@ class MpkAttemptTracker:
 
     def _set_retry_world(self, world_name: str | None) -> None:
         value = (world_name or "").strip()
+        current = (self.db.get_state(self.state_retry_world_key, "") or "").strip()
+        if value != current:
+            self.db.set_state(self.state_retry_count_key, "0")
         self.db.set_state(self.state_retry_world_key, value)
+        if not value:
+            self.db.set_state(self.state_retry_count_key, "0")
 
     def _get_retry_world(self) -> str:
         return (self.db.get_state(self.state_retry_world_key, "") or "").strip()
+
+    def _get_retry_count(self) -> int:
+        raw = self.db.get_state(self.state_retry_count_key, "0") or "0"
+        try:
+            return max(0, int(raw))
+        except ValueError:
+            return 0
+
+    def _bump_retry_count(self) -> int:
+        count = self._get_retry_count() + 1
+        self.db.set_state(self.state_retry_count_key, str(count))
+        return count
+
+    def _schedule_retry_or_drop(self, world_name: str, *, max_attempts: int = 3) -> tuple[bool, int]:
+        self._set_retry_world(world_name)
+        count = self._bump_retry_count()
+        if count >= max_attempts:
+            self._set_retry_world("")
+            return (False, count)
+        return (True, count)
 
     def _is_world_exit_line(self, body: str) -> bool:
         # Language-agnostic / forced markers only.
@@ -699,10 +725,14 @@ class MpkAttemptTracker:
                 prefer_retry = True
                 # Do not let an old stuck retry world starve newer worlds forever.
                 if active_world_name and active_world_name != retry_world_name:
+                    retry_count = self._get_retry_count()
+                    if retry_count >= 2:
+                        prefer_retry = False
                     active_world = self.saves_dir / active_world_name
                     if active_world.exists() and active_world.is_dir():
                         try:
-                            prefer_retry = retry_world.stat().st_mtime >= active_world.stat().st_mtime
+                            if prefer_retry:
+                                prefer_retry = retry_world.stat().st_mtime >= active_world.stat().st_mtime
                         except Exception:
                             prefer_retry = False
                     else:
@@ -724,12 +754,20 @@ class MpkAttemptTracker:
 
         storage_path = self._find_storage_file(world / "data")
         if storage_path is None:
-            self._set_retry_world(world_name)
-            self._set_ingest_diag(reason="no_storage", world_name=world_name)
+            scheduled, retry_count = self._schedule_retry_or_drop(world_name)
+            self._set_ingest_diag(
+                reason="no_storage" if scheduled else "no_storage_dropped",
+                world_name=world_name,
+                detail=f"retry={retry_count}",
+            )
             return
         if not self._wait_for_storage(storage_path):
-            self._set_retry_world(world_name)
-            self._set_ingest_diag(reason="storage_not_ready", world_name=world_name)
+            scheduled, retry_count = self._schedule_retry_or_drop(world_name)
+            self._set_ingest_diag(
+                reason="storage_not_ready" if scheduled else "storage_not_ready_dropped",
+                world_name=world_name,
+                detail=f"retry={retry_count}",
+            )
             return
         try:
             stat = storage_path.stat()
@@ -786,8 +824,16 @@ class MpkAttemptTracker:
                     metrics = refreshed
                     break
         if self._metrics_look_uninitialized(metrics):
-            self._set_retry_world(world_name)
-            self._set_ingest_diag(reason="uninitialized_storage_snapshot", world_name=world_name)
+            scheduled, retry_count = self._schedule_retry_or_drop(world_name)
+            self._set_ingest_diag(
+                reason=(
+                    "uninitialized_storage_snapshot"
+                    if scheduled
+                    else "uninitialized_storage_snapshot_dropped"
+                ),
+                world_name=world_name,
+                detail=f"retry={retry_count}",
+            )
             return
         bedrock = bedrock_by_node(world, radius=self.bedrock_radius)
         world_seed = world_seed_from_level_dat(world)
