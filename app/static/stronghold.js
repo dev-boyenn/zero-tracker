@@ -1,6 +1,7 @@
 let strongholdRefreshSeq = 0;
 const expandedStrongholdPreviewIds = new Set();
 let lastStrongholdLatestAttemptId = null;
+let lastStrongholdLatestMappedAttemptId = null;
 
 function setText(id, value) {
   const node = document.getElementById(id);
@@ -117,10 +118,18 @@ function renderStrongholdRecentTable(runs) {
   if (!tbody) return;
   tbody.innerHTML = "";
   const rows = Array.isArray(runs) ? runs : [];
+  const latestWithMap = rows.find((run) => !!run?.has_map);
+  const latestWithMapId = Number(latestWithMap?.id || 0);
+  if (Number.isFinite(latestWithMapId) && latestWithMapId > 0) {
+    // Always keep the newest available map expanded on the list page.
+    expandedStrongholdPreviewIds.add(latestWithMapId);
+  }
   for (const run of rows) {
     const id = Number(run.id || 0);
     const hasMap = !!run.has_map;
     const previewExpanded = expandedStrongholdPreviewIds.has(id);
+    const isLatestWithMap = hasMap && id === latestWithMapId;
+    const showPreview = isLatestWithMap || previewExpanded;
     const navTimeRaw = Number(run.stronghold_nav_seconds || 0);
     const navTime =
       navTimeRaw > 0 ? navTimeRaw : deriveNavSecondsFromVisits(run.visits || []);
@@ -129,9 +138,11 @@ function renderStrongholdRecentTable(runs) {
     const startedAtFull = escapeHtmlAttr(formatDateTime(run.started_at_utc));
     const startedAtRelative = formatRelativeDateTime(run.started_at_utc);
     const previewBtn = hasMap
-      ? `<button type="button" class="stronghold-preview-btn" data-attempt-id="${id}">${
-          previewExpanded ? "Hide" : "Show"
-        }</button>`
+      ? isLatestWithMap
+        ? `<span class="muted">Latest</span>`
+        : `<button type="button" class="stronghold-preview-btn" data-attempt-id="${id}">${
+            previewExpanded ? "Hide" : "Show"
+          }</button>`
       : "-";
     const tr = document.createElement("tr");
     tr.innerHTML = `
@@ -150,7 +161,7 @@ function renderStrongholdRecentTable(runs) {
     `;
     tbody.appendChild(tr);
 
-    if (previewExpanded) {
+    if (showPreview) {
       const previewRow = document.createElement("tr");
       previewRow.className = "stronghold-preview-row";
       previewRow.innerHTML = `
@@ -198,10 +209,17 @@ async function refreshStrongholdIndex(force = false) {
       `Updated ${new Date().toLocaleTimeString()}${watch ? ` | Watching: ${watch}` : ""}`
     );
     const latestAttemptId = Number(version?.latest_attempt_id || 0);
-    if (!force && lastStrongholdLatestAttemptId !== null && latestAttemptId === lastStrongholdLatestAttemptId) {
+    const latestMappedAttemptId = Number(version?.latest_mapped_attempt_id || 0);
+    if (
+      !force &&
+      lastStrongholdLatestAttemptId !== null &&
+      latestAttemptId === lastStrongholdLatestAttemptId &&
+      latestMappedAttemptId === lastStrongholdLatestMappedAttemptId
+    ) {
       return;
     }
     lastStrongholdLatestAttemptId = latestAttemptId;
+    lastStrongholdLatestMappedAttemptId = latestMappedAttemptId;
     const payload = await fetchJson("/api/stronghold/dashboard?limit=80");
     if (requestSeq !== strongholdRefreshSeq) {
       return;

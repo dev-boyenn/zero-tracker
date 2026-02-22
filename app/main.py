@@ -729,14 +729,28 @@ def stronghold_version(request: Request) -> dict[str, object]:
     db: Database = request.app.state.db
     row = db.query_one(
         """
-        SELECT COALESCE(MAX(id), 0) AS latest_attempt_id
+        SELECT
+            COALESCE(MAX(id), 0) AS latest_attempt_id,
+            COALESCE(
+                MAX(
+                    CASE
+                        WHEN COALESCE(stronghold_map_svg_path, '') <> '' THEN id
+                        ELSE 0
+                    END
+                ),
+                0
+            ) AS latest_mapped_attempt_id
         FROM attempts
         WHERE COALESCE(attempt_source, 'practice') = 'mpk'
           AND COALESCE(stronghold_sample_count, 0) > 0
         """
     )
     latest_attempt_id = int(row["latest_attempt_id"]) if row is not None else 0
-    return {"latest_attempt_id": latest_attempt_id}
+    latest_mapped_attempt_id = int(row["latest_mapped_attempt_id"]) if row is not None else 0
+    return {
+        "latest_attempt_id": latest_attempt_id,
+        "latest_mapped_attempt_id": latest_mapped_attempt_id,
+    }
 
 
 @app.get("/api/stronghold/dashboard")
