@@ -235,6 +235,32 @@ body {
   margin: 0.15rem 0;
 }
 
+.page-nav {
+  margin: 0.2rem 0 0.2rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.page-nav-link {
+  color: #cfe8fa;
+  text-decoration: none;
+  border: 1px solid rgba(129, 199, 255, 0.22);
+  background: rgba(9, 23, 33, 0.45);
+  border-radius: 8px;
+  padding: 0.16rem 0.52rem;
+  font-size: 0.78rem;
+}
+
+.page-nav-link.is-active {
+  border-color: rgba(74, 215, 167, 0.45);
+  color: #d4fff0;
+}
+
+.page-nav-link:hover {
+  border-color: var(--accent-soft);
+}
+
 .eyebrow {
   color: var(--accent);
   letter-spacing: 0.06em;
@@ -550,6 +576,17 @@ body {
   cursor: pointer;
 }
 
+#weakLockToOpenBtn {
+  background: rgba(9, 23, 33, 0.95);
+  color: var(--text);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 0.24rem 0.5rem;
+  font-family: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
 #clearMpkLocksBtn:hover {
   border-color: var(--accent-soft);
 }
@@ -562,12 +599,21 @@ body {
   border-color: var(--accent-soft);
 }
 
+#weakLockToOpenBtn:hover {
+  border-color: var(--accent-soft);
+}
+
 #fullRandomOverrideBtn:disabled {
   opacity: 0.55;
   cursor: default;
 }
 
 #skipWeakLockBtn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+#weakLockToOpenBtn:disabled {
   opacity: 0.55;
   cursor: default;
 }
@@ -966,6 +1012,11 @@ body {
   overflow: auto;
 }
 
+.stronghold-recent-section .stronghold-table-wrap {
+  max-height: none;
+  overflow: visible;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -1003,6 +1054,79 @@ tr:hover td {
   color: var(--muted);
   font-size: 0.74rem;
   line-height: 1.05;
+}
+
+.inline-link {
+  color: #9dd8ff;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(157, 216, 255, 0.35);
+}
+
+.inline-link:hover {
+  color: #d4efff;
+  border-bottom-color: rgba(212, 239, 255, 0.65);
+}
+
+.stronghold-preview-btn {
+  background: rgba(9, 23, 33, 0.95);
+  color: var(--text);
+  border: 1px solid var(--card-border);
+  border-radius: 7px;
+  padding: 0.16rem 0.42rem;
+  font-family: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+.stronghold-preview-btn:hover {
+  border-color: var(--accent-soft);
+}
+
+.stronghold-preview-row td {
+  background: rgba(9, 23, 33, 0.65);
+}
+
+.stronghold-preview-wrap {
+  width: 100%;
+  min-height: 220px;
+  border: 1px solid rgba(129, 199, 255, 0.18);
+  border-radius: 10px;
+  overflow: auto;
+  background: rgba(4, 15, 24, 0.55);
+}
+
+.stronghold-preview-wrap img {
+  width: 100%;
+  min-width: 880px;
+  display: block;
+}
+
+.stronghold-svg-card {
+  padding: 0.9rem;
+}
+
+.stronghold-svg-card h3 {
+  margin: 0 0 0.6rem 0;
+}
+
+.stronghold-svg-wrap {
+  border: 1px solid rgba(129, 199, 255, 0.22);
+  border-radius: 10px;
+  overflow: auto;
+  background: rgba(9, 23, 33, 0.5);
+  min-height: 320px;
+}
+
+.stronghold-svg-wrap img {
+  width: 100%;
+  min-width: 980px;
+  display: block;
+}
+
+.muted {
+  margin: 0.6rem;
+  color: var(--muted);
 }
 
 .tower-expand-btn {

@@ -8,7 +8,7 @@ data modify storage zdash:tracker run.dragon_died set value 0b
 data modify storage zdash:tracker run.dragon_died_gt set value 0L
 data modify storage zdash:tracker run.flyaway set value {armed:0b,detected:0b,node:"",node_code:0,detected_gt:0L,dragon_x:0,dragon_y:0,dragon_z:0,detected_dist2:0,crystals_alive:-1}
 data modify storage zdash:tracker run.deltas set value {beds_exploded:0,anchors_interactions:0,anchors_exploded_est:0,bows_shot:0,crossbows_shot:0}
-data modify storage zdash:tracker run.end_entry set value {logged:0b,gt:0L,player_y:0,top_y:-1,top_is_endstone:0b}
+data modify storage zdash:tracker run.end_entry set value {logged:0b,gt:0L,player_y:0,top_y:-1,top_is_endstone:0b,start_white_beds:0,start_anchors:0,start_bow:0,start_crossbow:0}
 data modify storage zdash:tracker run.explosive_stand set value {logged:0b,y:0}
 data modify storage zdash:tracker run.damage_by_source set value {beds_scaled:0,anchors_scaled:0,other_scaled:0}
 data modify storage zdash:tracker run.damage_events set value []
@@ -35,6 +35,10 @@ scoreboard players set #end_entry_logged zdi 0
 scoreboard players set #entry_player_y zdi 0
 scoreboard players set #entry_top_y zdi -1
 scoreboard players set #entry_top_is_endstone zdi 0
+scoreboard players set #entry_start_beds zdi 0
+scoreboard players set #entry_start_anchors zdi 0
+scoreboard players set #entry_start_bow zdi 0
+scoreboard players set #entry_start_xbow zdi 0
 scoreboard players set #explode_beds zdi 0
 scoreboard players set #explode_anchors zdi 0
 scoreboard players set #explode_total zdi 0
@@ -68,6 +72,9 @@ scoreboard players set #fly_since_end zdi 0
 scoreboard players set #fly_crystals_alive zdi 0
 scoreboard players set #fly_within2 zdi 100
 scoreboard players set #fly_away2 zdi 600
+scoreboard players set #eye_now zdi 0
+scoreboard players set #eye_delta zdi 0
+execute if entity @a run execute store result score #eye_start zdi run scoreboard players get @a[limit=1] zueye
 
 execute if entity @a run execute store result score #bow_start zdi run scoreboard players get @a[limit=1] zubow
 execute if entity @a run execute store result score #xbow_start zdi run scoreboard players get @a[limit=1] zuxbow

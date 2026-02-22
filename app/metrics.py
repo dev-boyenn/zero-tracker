@@ -655,6 +655,62 @@ def skip_current_mpk_weak_lock(db: Database) -> dict[str, Any]:
     }
 
 
+def replace_current_mpk_weak_lock_with_open(db: Database) -> dict[str, Any]:
+    lock_key = db.get_state(_MPK_WEAK_LOCK_TARGET_KEY, "") or ""
+    parsed = parse_mpk_target_key(lock_key)
+    if parsed is None:
+        return {
+            "ok": False,
+            "error": "No active weak lock target.",
+            "had_lock": bool(lock_key),
+            "previous_target_key": lock_key,
+            "new_target_key": "",
+            "already_open": False,
+        }
+    tower_name, side, level = parsed
+    open_key = f"mpk|{tower_name}|{side}|48"
+    if int(level) == 48:
+        return {
+            "ok": True,
+            "error": "",
+            "had_lock": True,
+            "previous_target_key": lock_key,
+            "new_target_key": open_key,
+            "already_open": True,
+        }
+    # Verify open target is available in seed map before swapping.
+    seed_map, _, _ = _load_mpk_seed_map()
+    if (tower_name, side, 48) not in seed_map:
+        return {
+            "ok": False,
+            "error": "Open (O48) target not available for this tower/side in seed map.",
+            "had_lock": True,
+            "previous_target_key": lock_key,
+            "new_target_key": "",
+            "already_open": False,
+        }
+
+    anchor_after_id = _max_finished_mpk_attempt_id(db)
+    db.set_state(_MPK_WEAK_LOCK_TARGET_KEY, open_key)
+    db.set_state(_MPK_WEAK_LOCK_ANCHOR_ATTEMPT_ID_KEY, str(anchor_after_id))
+    # Clear queued key/seed so next recommendation/seed is recalculated for the new lock.
+    db.set_state("mpk.practice.target_key", "")
+    db.set_state("mpk.practice.seed_value", "")
+    db.set_state("mpk.practice.next_selection_reason", "weak_lock")
+    db.set_state("mpk.practice.next_selection_mode", "weak")
+    db.set_state("mpk.practice.next_requested_mode", "weak")
+
+    return {
+        "ok": True,
+        "error": "",
+        "had_lock": True,
+        "previous_target_key": lock_key,
+        "new_target_key": open_key,
+        "already_open": False,
+        "anchor_after_id": anchor_after_id,
+    }
+
+
 def rotate_mpk_seed_for_target_key(
     db: Database, target_key: str, *, advance: bool
 ) -> dict[str, Any]:
@@ -1166,6 +1222,9 @@ def _scope_where(
 ) -> tuple[str, list[Any]]:
     clauses: list[str] = []
     params: list[Any] = []
+    # Zero dashboard should ignore runs that were inserted only for stronghold
+    # tracking when minimum End ticks were not met.
+    clauses.append("COALESCE(zero_attempt_eligible, 1) = 1")
 
     if zero_type is not None:
         clauses.append("COALESCE(zero_type, 'Unknown') = ?")
@@ -2270,6 +2329,10 @@ def compute_recent_attempts(
             anchors_exploded,
             bow_shots,
             crossbow_shots,
+            start_white_beds,
+            start_anchors,
+            start_bow,
+            start_crossbow,
             total_damage,
             major_damage_total,
             major_hit_count,
@@ -2278,7 +2341,9 @@ def compute_recent_attempts(
             flyaway_gt,
             flyaway_dragon_y,
             flyaway_node,
-            flyaway_crystals_alive
+            flyaway_crystals_alive,
+            stronghold_sample_count,
+            stronghold_map_svg_path
         FROM attempts
         {where}
         ORDER BY id DESC
@@ -2312,6 +2377,9 @@ def compute_recent_attempts(
         )
         o_level = _safe_int(row["o_level"]) if row["o_level"] is not None else None
         tower_name_value = str(row["tower_name"] or "Unknown")
+        stronghold_sample_count = _safe_int(row["stronghold_sample_count"])
+        stronghold_has_map = bool(str(row["stronghold_map_svg_path"] or "").strip())
+        has_stronghold_data = stronghold_sample_count > 0
         retry_target_key = None
         if (
             str(row["attempt_source"] or "practice").lower() == "mpk"
@@ -2349,6 +2417,10 @@ def compute_recent_attempts(
                 "bow_shots": _safe_int(row["bow_shots"]),
                 "crossbow_shots": _safe_int(row["crossbow_shots"]),
                 "bow_shots_total": _safe_int(row["bow_shots"]) + _safe_int(row["crossbow_shots"]),
+                "start_white_beds": _safe_int(row["start_white_beds"]),
+                "start_anchors": _safe_int(row["start_anchors"]),
+                "start_bow": _safe_int(row["start_bow"]),
+                "start_crossbow": _safe_int(row["start_crossbow"]),
                 "total_damage": total_damage,
                 "major_hit_count": major_hit_count,
                 "major_damage_per_hit": round(major_damage_per_hit, 2),
@@ -2362,6 +2434,12 @@ def compute_recent_attempts(
                 "flyaway_node": str(row["flyaway_node"] or ""),
                 "flyaway_crystals_alive": _safe_int(row["flyaway_crystals_alive"])
                 if row["flyaway_crystals_alive"] is not None
+                else None,
+                "stronghold_sample_count": stronghold_sample_count,
+                "has_stronghold_data": has_stronghold_data,
+                "stronghold_has_map": stronghold_has_map,
+                "stronghold_detail_url": f"/stronghold/{_safe_int(row['id'])}"
+                if has_stronghold_data
                 else None,
             }
         )

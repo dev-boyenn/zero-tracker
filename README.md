@@ -1,58 +1,76 @@
-# Zero Cycle Dashboard
+# Zero Practice Dashboard
 
-Local dashboard for Minecraft zero-cycle tracking (MPK-focused).
+Local web dashboard for tracking **real MPK zero-cycle runs** over time.
 
-It tails the configured instance `latest.log`, parses runs, and serves a live-updating web UI with tower/side/rotation-focused analytics and practice recommendations.
+It watches your configured Minecraft instance, ingests run data into SQLite, and gives live analytics + practice targeting.
 
 ![Dashboard Screenshot](image.png)
 
-## Download
+## What It Does
+- Continuously reads your instance `latest.log`
+- Parses run outcomes (success/fail/flyaway), tower/side/rotation, O-level, standing Y, explosions, shots, and damage splits
+- Stores both raw log history and parsed attempts in `data/zero_cycles.db`
+- Shows live charts, recent attempts, and a tower x O-level heatmap
+- Recommends what to practice next and can drive set-seed practice automatically
+- Tracks stronghold navigation raw path (Eye Spy -> End entry) in storage + SQLite for later room analysis
 
-1. Click the green `Code` button on the top of this github page.
-2. Click `Download ZIP` in the dropdown.
-3. Extract the ZIP to a folder.
-4. Run future commands from a command prompt  in that folder ( for windows users:  in windows explorer, shift+rightclick in  an empty space in the folder => open in Terminal, for linux users: you should be tech savvy enough )
+## Injection / Runtime Behavior
+The app can inject helper components into your selected instance, with backups and restore on uninject/shutdown.
 
-## Features
-- Live log ingestion from Minecraft `latest.log`
-- SQLite storage for raw log events and parsed attempts
-- Session-aware analytics and rolling consistency charts
-- Tower/side/rotation breakdowns with drill-downs
-- "What to practice next" target selection with command copy support
-- Datapack command integration (`/function practice:zdash/...`)
+- Always injects: `zdash_tracker` datapack
+- Optional: altered Atum jar (set-seed injection), recipe-book jar, dragon-node patch jar
+- Supports **Full Random override** (no forced seed injection)
+- Supports **Legal Ranked Instance** mode:
+  - Forces full random
+  - Disables recipe-book + dragon patch jars
+  - Skips Atum injection (no set-seed injection)
+  - Still injects datapack
 
-## Requirements
-- Python 3.11+ (3.13 tested)
-- Windows PowerShell or Command Prompt
-- Access to your Minecraft log file
-
-## Setup
+## Quick Start (Windows)
+1. Download ZIP: click green `Code` -> `Download ZIP`, then extract.
+2. Open terminal in the extracted folder.
+3. Install deps:
 ```powershell
-python -m pip install -r requirements.txt
+py -3 -m pip install -r requirements.txt
 ```
-Override the Zero datapack in your meescht practice map with the one in this repo
-
-## Run
+4. Run:
 ```powershell
-python run_dashboard.py
+py -3 run_dashboard.py
 ```
+5. Open `http://127.0.0.1:8000`
 
-Open `http://127.0.0.1:8000`.
+Alternative: run `run_zero_tracker.bat` to auto-clone/update, install requirements, and start.
 
-`run_dashboard.py` starts Uvicorn and opens a browser. `Ctrl+C` shuts both down.
+## First-Time Setup In UI
+1. Enter your MultiMC instance path (.minecraft folder).
+2. Choose toggles (or Legal Ranked mode).
+3. Click `Save & Inject`.
+4. Use `Uninject + Clear Path` to restore and clear config. ( will also happen on application exit )
 
-## Configuration
-Primary config file:
-- `config.py` at repo root
+## Data + Config
+- Database: `data/zero_cycles.db`
+- App config defaults: `config.py`
+- Main runtime path is stored in DB (`setup.mpk_instance_path`)
 
-You can edit defaults there directly (`POLL_SECONDS`, etc.), or override with environment variables.
+## Stronghold Nav Analysis (Prototype)
+This repo now includes a seed-based stronghold room/path cracker for 1.16.1.
 
-MPK instance path is configured in the frontend setup card and stored in the SQLite DB (`setup.mpk_instance_path`), not in `config.py`.
+1. Ensure your datapack-injected run contains Eye Spy and End entry data.
+2. Run:
+```powershell
+py -3 scripts/analyze_stronghold_world.py "C:\path\to\world"
+```
+Optional: also write `rooms_entered` + starter dwell back into latest DB attempt for that world:
+```powershell
+py -3 scripts/analyze_stronghold_world.py "C:\path\to\world" --update-db
+```
+3. Output map JSON is written to:
+- `<world>\data\zdash_stronghold_map.json`
 
-Environment variables:
-- `ZERO_DASH_DB_PATH`: SQLite DB path  
-  Default: `data/zero_cycles.db`
-- `ZERO_DASH_POLL_SECONDS`: log polling interval  
-  Default: `0.4`
-- `ZERO_DASH_MAJOR_DAMAGE_THRESHOLD`: threshold for major damage hit classification  
-  Default: `15`
+Raw stronghold samples are also stored in DB table:
+- `stronghold_samples` (linked to `attempts.id`)
+
+Auto-watch latest world on exit (no manual world-name lookup):
+```powershell
+py -3 scripts/watch_stronghold_analyze.py --instance "C:\Users\Boyen\Desktop\MultiMC\instances\Ranked\.minecraft"
+```

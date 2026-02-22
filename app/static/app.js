@@ -29,7 +29,10 @@ let lockedMpkTargets = new Set();
 let lockRequestInFlight = false;
 let fullRandomOverrideRequestInFlight = false;
 let weakLockSkipRequestInFlight = false;
+let weakLockToOpenRequestInFlight = false;
 let thresholdTooltipEl = null;
+let mpkSetupEditLock = false;
+let lastSeenLatestAttemptId = null;
 let lastWeakLockState = {
   lockActive: false,
   targetKey: "",
@@ -409,16 +412,16 @@ function renderMpkSetupCard(health) {
   } else {
     message.textContent = "MPK injector is configured. You can update the instance path or uninject and clear it.";
   }
-  if (document.activeElement !== input) {
+  if (!mpkSetupEditLock && document.activeElement !== input) {
     input.value = String((health && health.mpk_instance_path) || "");
   }
-  if (legalToggle) {
+  if (!mpkSetupEditLock && legalToggle) {
     legalToggle.checked = !!(health && health.mpk_legal_ranked_instance);
   }
-  if (recipeToggle) {
+  if (!mpkSetupEditLock && recipeToggle) {
     recipeToggle.checked = !!(health && health.mpk_inject_recipe_book !== false);
   }
-  if (dragonPatchToggle) {
+  if (!mpkSetupEditLock && dragonPatchToggle) {
     dragonPatchToggle.checked = !!(health && health.mpk_inject_dragon_patch !== false);
   }
   syncMpkLegalToggleState();
@@ -458,6 +461,7 @@ function updateMpkLockControls(widget) {
   const lockRow = document.querySelector(".practice-lock-row");
   const clearBtn = document.getElementById("clearMpkLocksBtn");
   const skipWeakBtn = document.getElementById("skipWeakLockBtn");
+  const weakToOpenBtn = document.getElementById("weakLockToOpenBtn");
   const overrideBtn = document.getElementById("fullRandomOverrideBtn");
   const legalRankedEnabled = !!(lastHealth && lastHealth.mpk_legal_ranked_instance);
   const isMpk = widget && widget.source === "mpk";
@@ -480,6 +484,11 @@ function updateMpkLockControls(widget) {
     skipWeakBtn.style.display = isMpk ? "" : "none";
     skipWeakBtn.disabled = weakLockSkipRequestInFlight || !weakLockActive;
     skipWeakBtn.textContent = weakLockSkipRequestInFlight ? "Skipping..." : "Skip Weak Lock";
+  }
+  if (weakToOpenBtn) {
+    weakToOpenBtn.style.display = isMpk ? "" : "none";
+    weakToOpenBtn.disabled = weakLockToOpenRequestInFlight || !weakLockActive;
+    weakToOpenBtn.textContent = weakLockToOpenRequestInFlight ? "Switching..." : "Weak -> Open";
   }
   if (overrideBtn) {
     overrideBtn.style.display = isMpk ? "" : "none";
@@ -552,6 +561,15 @@ async function postSkipMpkWeakLock() {
   const json = await res.json();
   if (!res.ok || !json.ok) {
     throw new Error(json.error || `Skip weak lock failed (${res.status})`);
+  }
+  return json;
+}
+
+async function postReplaceMpkWeakLockWithOpen() {
+  const res = await fetch("/api/mpk/weak-lock/replace-with-open", { method: "POST" });
+  const json = await res.json();
+  if (!res.ok || !json.ok) {
+    throw new Error(json.error || `Weak lock replace-with-open failed (${res.status})`);
   }
   return json;
 }
@@ -1647,12 +1665,23 @@ function renderAttemptTable(rows) {
       : rotExplMain;
     const bowShots = Number(row.bow_shots || 0);
     const crossbowShots = Number(row.crossbow_shots || 0);
+    const startBow = Number(row.start_bow || 0);
+    const startCrossbow = Number(row.start_crossbow || 0);
     const totalBowShots =
       row.bow_shots_total === null || row.bow_shots_total === undefined
         ? bowShots + crossbowShots
         : Number(row.bow_shots_total || 0);
-    const bowShotsText =
-      totalBowShots > 0 ? `${totalBowShots} (${bowShots}+${crossbowShots})` : "0";
+    let rangedLabel = "B";
+    if (startBow > 0 && startCrossbow > 0) {
+      rangedLabel = crossbowShots > bowShots ? "XB" : "B";
+    } else if (startCrossbow > 0) {
+      rangedLabel = "XB";
+    } else if (startBow > 0) {
+      rangedLabel = "B";
+    } else {
+      rangedLabel = "None";
+    }
+    const bowShotsText = `${totalBowShots} (${rangedLabel})`;
     const oLevelText =
       row.o_level === null || row.o_level === undefined || Number.isNaN(Number(row.o_level))
         ? "-"
@@ -1665,11 +1694,23 @@ function renderAttemptTable(rows) {
       Number.isNaN(Number(row.standing_height))
         ? "-"
         : `Y${Number(row.standing_height)}`;
+    const startWhiteBeds = Number(row.start_white_beds || 0);
+    const startAnchors = Number(row.start_anchors || 0);
+    const startExplText =
+      startWhiteBeds > 0 || startAnchors > 0 ? `${startWhiteBeds}b${startAnchors}a` : "-";
     const relativeStartedAt = formatRelativeDateTime(row.started_at_utc);
     const fullStartedAt = escapeHtmlAttr(formatDateTime(row.started_at_utc));
     const retryTargetKey = String(row.retry_target_key || "").trim();
     const canRetry =
       String(row.attempt_source || "").toLowerCase() === "mpk" && retryTargetKey.startsWith("mpk|");
+    const strongholdDetailUrl = String(row.stronghold_detail_url || "").trim();
+    const hasStrongholdData = !!row.has_stronghold_data;
+    const hasStrongholdMap = !!row.stronghold_has_map;
+    const strongholdCell = hasStrongholdData
+      ? `<a class="inline-link" href="${escapeHtmlAttr(
+          strongholdDetailUrl || `/stronghold/${row.id}`
+        )}">${hasStrongholdMap ? "View" : "Tracked"}</a>`
+      : "-";
     const retryCell = canRetry
       ? `<button type="button" class="attempt-retry-btn" data-target-key="${escapeHtmlAttr(retryTargetKey)}"${
           lockRequestInFlight ? " disabled" : ""
@@ -1698,12 +1739,14 @@ function renderAttemptTable(rows) {
       <td>${row.id}</td>
       <td title="${fullStartedAt}">${relativeStartedAt}</td>
       <td>${String(row.attempt_source || "practice").toUpperCase()}</td>
+      <td>${strongholdCell}</td>
       <td class="status-${row.status}">${statusLabel}</td>
       <td>${row.tower_name || "Unknown"}</td>
       <td>${sideFromType(row.zero_type)}</td>
       <td>${isOneEightText}</td>
       <td>${oLevelText}</td>
       <td>${standingYText}</td>
+      <td>${startExplText}</td>
       <td>${bowShotsText}</td>
       <td>${row.total_damage}</td>
       <td>${rotExpl}</td>
@@ -1991,10 +2034,39 @@ async function refresh(detail = "full") {
     const health = await healthRes.json();
     lastHealth = health;
     renderMpkSetupCard(health);
-    const payload = await dashboardRes.json();
+    let payload = await dashboardRes.json();
     if (requestSeq !== refreshRequestSeq) {
       return;
     }
+    const incomingLatestAttemptId = Number(payload.latest_attempt_id || 0);
+    if (detail === "light") {
+      const knownLatestAttemptId =
+        lastSeenLatestAttemptId === null ? null : Number(lastSeenLatestAttemptId);
+      if (
+        knownLatestAttemptId !== null &&
+        Number.isFinite(knownLatestAttemptId) &&
+        knownLatestAttemptId === incomingLatestAttemptId
+      ) {
+        const healthDot = document.getElementById("healthDot");
+        const healthText = document.getElementById("healthText");
+        const mpkAlive = !!(health.ok && health.mpk_enabled && health.mpk_log_exists);
+        const alive = mpkAlive;
+        healthDot.className = `dot ${alive ? "dot-on" : "dot-off"}`;
+        healthText.textContent = alive ? "Reader active" : "Log path not found";
+        const watchLabel = health.mpk_log_path;
+        setText(
+          "lastUpdated",
+          `Updated ${new Date(payload.server_time_utc).toLocaleTimeString()} | Watching: ${watchLabel}`
+        );
+        return;
+      }
+      const fullRes = await fetch(buildDashboardUrl("full"));
+      payload = await fullRes.json();
+      if (requestSeq !== refreshRequestSeq) {
+        return;
+      }
+    }
+    lastSeenLatestAttemptId = Number(payload.latest_attempt_id || 0);
 
     renderPayload(payload);
 
@@ -2041,9 +2113,8 @@ async function refreshHealth() {
   }
 }
 
-refresh("light");
 refresh("full");
-setInterval(() => refresh("full"), 2000);
+setInterval(() => refresh("light"), 2000);
 refreshHealth();
 setInterval(refreshHealth, 5000);
 ensureFilterDefaults();
@@ -2106,6 +2177,26 @@ if (rotationFilter) {
 
 const mpkSetupForm = document.getElementById("mpkSetupForm");
 if (mpkSetupForm) {
+  const input = document.getElementById("mpkInstancePathInput");
+  const legalToggle = document.getElementById("mpkLegalRankedToggle");
+  const recipeToggle = document.getElementById("mpkInjectRecipeBookToggle");
+  const dragonPatchToggle = document.getElementById("mpkInjectDragonPatchToggle");
+  const markMpkSetupDirty = () => {
+    mpkSetupEditLock = true;
+  };
+  if (input) {
+    input.addEventListener("input", markMpkSetupDirty);
+  }
+  if (legalToggle) {
+    legalToggle.addEventListener("change", markMpkSetupDirty);
+  }
+  if (recipeToggle) {
+    recipeToggle.addEventListener("change", markMpkSetupDirty);
+  }
+  if (dragonPatchToggle) {
+    dragonPatchToggle.addEventListener("change", markMpkSetupDirty);
+  }
+
   mpkSetupForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const input = document.getElementById("mpkInstancePathInput");
@@ -2139,6 +2230,7 @@ if (mpkSetupForm) {
         status.textContent = `Error: ${err}`;
       } else {
         status.textContent = "MPK setup complete.";
+        mpkSetupEditLock = false;
       }
       await refresh("full");
     } catch (error) {
@@ -2152,6 +2244,7 @@ if (mpkSetupForm) {
 const mpkLegalRankedToggle = document.getElementById("mpkLegalRankedToggle");
 if (mpkLegalRankedToggle) {
   mpkLegalRankedToggle.addEventListener("change", () => {
+    mpkSetupEditLock = true;
     syncMpkLegalToggleState();
   });
 }
@@ -2172,6 +2265,7 @@ if (mpkClearBtn) {
         if (status) status.textContent = `Error: ${err}`;
       } else if (status) {
         status.textContent = "MPK un-injected and path cleared.";
+        mpkSetupEditLock = false;
       }
       await refresh("full");
     } catch (error) {
@@ -2312,6 +2406,24 @@ if (skipWeakLockBtn) {
       console.error("Failed to skip weak lock:", error);
     } finally {
       weakLockSkipRequestInFlight = false;
+      updateMpkLockControls(lastPayload?.practice_next || {});
+    }
+  });
+}
+
+const weakLockToOpenBtn = document.getElementById("weakLockToOpenBtn");
+if (weakLockToOpenBtn) {
+  weakLockToOpenBtn.addEventListener("click", async () => {
+    if (weakLockToOpenRequestInFlight) return;
+    weakLockToOpenRequestInFlight = true;
+    updateMpkLockControls(lastPayload?.practice_next || {});
+    try {
+      await postReplaceMpkWeakLockWithOpen();
+      await refresh("full");
+    } catch (error) {
+      console.error("Failed to replace weak lock with open target:", error);
+    } finally {
+      weakLockToOpenRequestInFlight = false;
       updateMpkLockControls(lastPayload?.practice_next || {});
     }
   });

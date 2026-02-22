@@ -1,0 +1,10 @@
+{
+  "criteria": {
+    "eye_spy": {
+      "trigger": "minecraft:used_ender_eye"
+    }
+  },
+  "rewards": {
+    "function": "zdash_tracker:stronghold/on_eye_spy"
+  }
+}

@@ -199,6 +199,66 @@ def _parse_damage_events(raw_events: Any) -> list[dict[str, int]]:
     return parsed
 
 
+def _parse_stronghold_samples(raw_samples: Any) -> list[dict[str, int]]:
+    if not isinstance(raw_samples, list):
+        return []
+    parsed: list[dict[str, int]] = []
+    for item in raw_samples:
+        if not isinstance(item, dict):
+            continue
+        parsed.append(
+            {
+                "gt": int(item.get("gt", 0) or 0),
+                "x": int(item.get("x", 0) or 0),
+                "y": int(item.get("y", 0) or 0),
+                "z": int(item.get("z", 0) or 0),
+                "dim": int(item.get("dim", 0) or 0),
+            }
+        )
+    parsed.sort(key=lambda s: s["gt"])
+    return parsed
+
+
+def _extract_world_seed_plain(node: Any) -> int | None:
+    plain = _to_plain(node)
+    if isinstance(plain, dict):
+        world_gen_settings = plain.get("WorldGenSettings")
+        if isinstance(world_gen_settings, dict):
+            seed_value = world_gen_settings.get("seed")
+            if isinstance(seed_value, (int, float)):
+                return int(seed_value)
+        random_seed = plain.get("RandomSeed")
+        if isinstance(random_seed, (int, float)):
+            return int(random_seed)
+        if "seed" in plain and isinstance(plain.get("seed"), (int, float)):
+            return int(plain["seed"])
+        for value in plain.values():
+            seed = _extract_world_seed_plain(value)
+            if seed is not None:
+                return seed
+    elif isinstance(plain, list):
+        for value in plain:
+            seed = _extract_world_seed_plain(value)
+            if seed is not None:
+                return seed
+    return None
+
+
+def world_seed_from_level_dat(world_dir: Path) -> int | None:
+    level_path = world_dir / "level.dat"
+    if not level_path.exists():
+        return None
+    try:
+        nbt_file = nbtlib.load(level_path)
+    except Exception:
+        try:
+            with gzip.open(level_path, "rb") as f:
+                nbt_file = nbtlib.File.parse(f)
+        except Exception:
+            return None
+    return _extract_world_seed_plain(nbt_file)
+
+
 def _attribute_damage_from_events(
     explode_events: list[dict[str, int]],
     damage_events: list[dict[str, int]],
@@ -366,6 +426,10 @@ def run_metrics_from_storage(path: Path) -> dict[str, Any]:
     flyaway = run.get("flyaway") if isinstance(run.get("flyaway"), dict) else {}
     end_entry = run.get("end_entry") if isinstance(run.get("end_entry"), dict) else {}
     explosive_stand = run.get("explosive_stand") if isinstance(run.get("explosive_stand"), dict) else {}
+    stronghold = tracker.get("stronghold") if isinstance(tracker.get("stronghold"), dict) else {}
+    stronghold_eye = stronghold.get("eye_spy") if isinstance(stronghold.get("eye_spy"), dict) else {}
+    stronghold_end = stronghold.get("end_enter") if isinstance(stronghold.get("end_enter"), dict) else {}
+    stronghold_samples = _parse_stronghold_samples(stronghold.get("samples"))
     explode_events = _parse_explode_events(run.get("explode_events"))
     damage_events = _parse_damage_events(run.get("damage_events"))
 
@@ -443,9 +507,23 @@ def run_metrics_from_storage(path: Path) -> dict[str, Any]:
     entry_player_y = int(end_entry.get("player_y", 0) or 0)
     entry_top_y = int(end_entry.get("top_y", -1) or -1)
     entry_top_is_endstone = bool(end_entry.get("top_is_endstone", 0))
+    entry_start_white_beds = int(end_entry.get("start_white_beds", 0) or 0)
+    entry_start_anchors = int(end_entry.get("start_anchors", 0) or 0)
+    entry_start_bow = int(end_entry.get("start_bow", 0) or 0)
+    entry_start_crossbow = int(end_entry.get("start_crossbow", 0) or 0)
     entry_caged_endstone = entry_top_is_endstone and entry_top_y >= entry_player_y
     explosive_standing_logged = bool(explosive_stand.get("logged", 0))
     explosive_standing_y = int(explosive_stand.get("y", 0) or 0) if explosive_standing_logged else None
+    stronghold_eye_logged = bool(stronghold_eye.get("logged", 0))
+    stronghold_eye_gt = int(stronghold_eye.get("gt", 0) or 0)
+    stronghold_end_logged = bool(stronghold_end.get("logged", 0))
+    stronghold_end_gt = int(stronghold_end.get("gt", 0) or 0)
+    stronghold_nav_ticks = (
+        stronghold_end_gt - stronghold_eye_gt
+        if stronghold_eye_logged and stronghold_end_logged and stronghold_end_gt > stronghold_eye_gt
+        else 0
+    )
+    stronghold_nav_seconds = float(stronghold_nav_ticks) / 20.0 if stronghold_nav_ticks > 0 else 0.0
 
     return {
         "pack_version": str(version) if version is not None else "",
@@ -472,8 +550,30 @@ def run_metrics_from_storage(path: Path) -> dict[str, Any]:
         "end_entry_top_y": entry_top_y,
         "end_entry_top_is_endstone": entry_top_is_endstone,
         "end_entry_caged_endstone": entry_caged_endstone,
+        "end_entry_start_white_beds": entry_start_white_beds,
+        "end_entry_start_anchors": entry_start_anchors,
+        "end_entry_start_bow": entry_start_bow,
+        "end_entry_start_crossbow": entry_start_crossbow,
         "explosive_standing_logged": explosive_standing_logged,
         "explosive_standing_y": explosive_standing_y,
+        "stronghold_active": bool(stronghold.get("active", 0)),
+        "stronghold_sample_interval_ticks": int(stronghold.get("sample_interval_ticks", 0) or 0),
+        "stronghold_eye_spy_logged": stronghold_eye_logged,
+        "stronghold_eye_spy_gt": stronghold_eye_gt,
+        "stronghold_eye_spy_x": int(stronghold_eye.get("x", 0) or 0),
+        "stronghold_eye_spy_y": int(stronghold_eye.get("y", 0) or 0),
+        "stronghold_eye_spy_z": int(stronghold_eye.get("z", 0) or 0),
+        "stronghold_eye_spy_dim": int(stronghold_eye.get("dim", 0) or 0),
+        "stronghold_end_enter_logged": stronghold_end_logged,
+        "stronghold_end_enter_gt": stronghold_end_gt,
+        "stronghold_end_enter_x": int(stronghold_end.get("x", 0) or 0),
+        "stronghold_end_enter_y": int(stronghold_end.get("y", 0) or 0),
+        "stronghold_end_enter_z": int(stronghold_end.get("z", 0) or 0),
+        "stronghold_end_enter_dim": int(stronghold_end.get("dim", 0) or 0),
+        "stronghold_nav_ticks": stronghold_nav_ticks,
+        "stronghold_nav_seconds": round(stronghold_nav_seconds, 3),
+        "stronghold_sample_count": len(stronghold_samples),
+        "stronghold_samples": stronghold_samples,
         "beds_exploded_raw": int(deltas.get("beds_exploded", 0) or 0),
         "anchors_interactions": int(deltas.get("anchors_interactions", 0) or 0),
         "anchors_exploded_est_raw": sum(int(ev.get("explode_anchors", 0) or 0) for ev in explode_events),
@@ -641,6 +741,8 @@ def main() -> int:
     if world_dir is not None:
         print("----")
         print(f"World: {world_dir}")
+        seed = world_seed_from_level_dat(world_dir)
+        print(f"World seed: {seed if seed is not None else 'unknown'}")
         nodes = {
             "back_diag": (-34, 24),
             "front_diag": (33, -25),

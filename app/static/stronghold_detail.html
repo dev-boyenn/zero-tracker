@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Zero Practice Dashboard - Stronghold Detail</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body data-page="stronghold-detail">
+    <div class="bg-shape bg-shape-a"></div>
+    <div class="bg-shape bg-shape-b"></div>
+    <main class="page">
+      <section class="hero card">
+        <div>
+          <p class="eyebrow">Stronghold Attempt Detail</p>
+          <h1>Zero Practice Dashboard</h1>
+          <p class="page-nav">
+            <a href="/" class="page-nav-link">Zero Cycle</a>
+            <a href="/stronghold" class="page-nav-link">Stronghold Nav</a>
+          </p>
+          <p id="strongholdDetailTitle">Loading attempt...</p>
+        </div>
+      </section>
+
+      <section class="kpi-grid">
+        <article class="card kpi">
+          <p>Portal Entered</p>
+          <h2 id="shdPortal">No</h2>
+        </article>
+        <article class="card kpi">
+          <p>Starter Time</p>
+          <h2 id="shdStarterTime">0.00s</h2>
+        </article>
+        <article class="card kpi">
+          <p>Rooms Entered</p>
+          <h2 id="shdRoomsEntered">0</h2>
+        </article>
+        <article class="card kpi">
+          <p>Optimal Rooms</p>
+          <h2 id="shdOptimalRooms">-</h2>
+        </article>
+        <article class="card kpi">
+          <p>Room Delta</p>
+          <h2 id="shdRoomDelta">-</h2>
+        </article>
+        <article class="card kpi">
+          <p>Avg Time / Room</p>
+          <h2 id="shdAvgRoomTime">0.00s</h2>
+        </article>
+        <article class="card kpi">
+          <p>Nav Time</p>
+          <h2 id="shdNavTime">0.00s</h2>
+        </article>
+      </section>
+
+      <section class="card stronghold-svg-card">
+        <h3>Stronghold Topdown SVG</h3>
+        <div id="strongholdSvgWrap" class="stronghold-svg-wrap">
+          <p class="muted">Loading map...</p>
+        </div>
+      </section>
+
+      <section class="table-grid single">
+        <article class="card table-card">
+          <h3>Room Visits</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Room ID</th>
+                  <th>Type</th>
+                  <th>Enter GT</th>
+                  <th>Exit GT</th>
+                  <th>Duration</th>
+                </tr>
+              </thead>
+              <tbody id="strongholdVisitTable"></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+    </main>
+    <script src="/static/stronghold.js"></script>
+  </body>
+</html>

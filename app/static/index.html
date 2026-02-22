@@ -21,6 +21,10 @@
         <div>
           <p class="eyebrow">Live Zero Cycle Analytics</p>
           <h1>Zero Practice Dashboard</h1>
+          <p class="page-nav">
+            <a href="/" class="page-nav-link is-active">Zero Cycle</a>
+            <a href="/stronghold" class="page-nav-link">Stronghold Nav</a>
+          </p>
           <p id="lastUpdated">Waiting for data...</p>
         </div>
         <div class="health">
@@ -125,6 +129,7 @@
         <div class="practice-lock-row">
           <button id="clearMpkLocksBtn" type="button">Clear Lock List</button>
           <button id="skipWeakLockBtn" type="button">Skip Weak Lock</button>
+          <button id="weakLockToOpenBtn" type="button">Weak -> Open</button>
           <button id="fullRandomOverrideBtn" type="button">Enable Full Random</button>
         </div>
         <div class="practice-command-row">
@@ -146,12 +151,14 @@
                   <th>ID</th>
                   <th>Timestamp</th>
                   <th>Source</th>
+                  <th>Stronghold</th>
                   <th>Status</th>
                   <th>Tower</th>
                   <th>Side</th>
                   <th>1/8</th>
                   <th>O Level</th>
                   <th>Standing Y</th>
+                  <th>Start Expl</th>
                   <th>Bow Shots</th>
                   <th>Total Dmg</th>
                   <th>Explosives</th>

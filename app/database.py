@@ -59,6 +59,10 @@ class Database:
             anchors_exploded INTEGER NOT NULL DEFAULT 0,
             bow_shots INTEGER NOT NULL DEFAULT 0,
             crossbow_shots INTEGER NOT NULL DEFAULT 0,
+            start_white_beds INTEGER NOT NULL DEFAULT 0,
+            start_anchors INTEGER NOT NULL DEFAULT 0,
+            start_bow INTEGER NOT NULL DEFAULT 0,
+            start_crossbow INTEGER NOT NULL DEFAULT 0,
             major_damage_total INTEGER NOT NULL DEFAULT 0,
             major_hit_count INTEGER NOT NULL DEFAULT 0,
             setup_damage_total INTEGER NOT NULL DEFAULT 0,
@@ -73,6 +77,25 @@ class Database:
             flyaway_node TEXT,
             flyaway_crystals_alive INTEGER,
             world_name TEXT,
+            world_seed INTEGER,
+            storage_fingerprint TEXT,
+            zero_attempt_eligible INTEGER NOT NULL DEFAULT 1,
+            stronghold_eye_spy_gt INTEGER,
+            stronghold_end_enter_gt INTEGER,
+            stronghold_nav_ticks INTEGER,
+            stronghold_nav_seconds REAL,
+            stronghold_sample_count INTEGER NOT NULL DEFAULT 0,
+            stronghold_rooms_entered INTEGER,
+            stronghold_starter_ticks INTEGER,
+            stronghold_starter_seconds REAL,
+            stronghold_avg_room_ticks REAL,
+            stronghold_avg_room_seconds REAL,
+            stronghold_portal_room_entered INTEGER NOT NULL DEFAULT 0,
+            stronghold_optimal_rooms INTEGER,
+            stronghold_optimal_edges INTEGER,
+            stronghold_room_delta INTEGER,
+            stronghold_map_json_path TEXT,
+            stronghold_map_svg_path TEXT,
             created_at TEXT NOT NULL,
             FOREIGN KEY(started_event_id) REFERENCES raw_log_events(id)
         );
@@ -104,6 +127,24 @@ class Database:
             ON attempt_beds (bed_index);
         CREATE INDEX IF NOT EXISTS idx_attempt_beds_attempt_major
             ON attempt_beds (attempt_id, is_major, id);
+
+        CREATE TABLE IF NOT EXISTS stronghold_samples (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            attempt_id INTEGER NOT NULL,
+            sample_index INTEGER NOT NULL,
+            gt INTEGER NOT NULL,
+            x INTEGER NOT NULL,
+            y INTEGER NOT NULL,
+            z INTEGER NOT NULL,
+            dim INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(attempt_id) REFERENCES attempts(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_stronghold_samples_attempt
+            ON stronghold_samples (attempt_id, sample_index);
+        CREATE INDEX IF NOT EXISTS idx_stronghold_samples_gt
+            ON stronghold_samples (attempt_id, gt);
 
         CREATE TABLE IF NOT EXISTS attempt_events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -152,10 +193,33 @@ class Database:
             ("attempts", "flyaway_node", "TEXT"),
             ("attempts", "flyaway_crystals_alive", "INTEGER"),
             ("attempts", "world_name", "TEXT"),
+            ("attempts", "world_seed", "INTEGER"),
+            ("attempts", "storage_fingerprint", "TEXT"),
+            ("attempts", "zero_attempt_eligible", "INTEGER NOT NULL DEFAULT 1"),
+            ("attempts", "stronghold_eye_spy_gt", "INTEGER"),
+            ("attempts", "stronghold_end_enter_gt", "INTEGER"),
+            ("attempts", "stronghold_nav_ticks", "INTEGER"),
+            ("attempts", "stronghold_nav_seconds", "REAL"),
+            ("attempts", "stronghold_sample_count", "INTEGER NOT NULL DEFAULT 0"),
+            ("attempts", "stronghold_rooms_entered", "INTEGER"),
+            ("attempts", "stronghold_starter_ticks", "INTEGER"),
+            ("attempts", "stronghold_starter_seconds", "REAL"),
+            ("attempts", "stronghold_avg_room_ticks", "REAL"),
+            ("attempts", "stronghold_avg_room_seconds", "REAL"),
+            ("attempts", "stronghold_portal_room_entered", "INTEGER NOT NULL DEFAULT 0"),
+            ("attempts", "stronghold_optimal_rooms", "INTEGER"),
+            ("attempts", "stronghold_optimal_edges", "INTEGER"),
+            ("attempts", "stronghold_room_delta", "INTEGER"),
+            ("attempts", "stronghold_map_json_path", "TEXT"),
+            ("attempts", "stronghold_map_svg_path", "TEXT"),
             ("attempts", "beds_exploded", "INTEGER NOT NULL DEFAULT 0"),
             ("attempts", "anchors_exploded", "INTEGER NOT NULL DEFAULT 0"),
             ("attempts", "bow_shots", "INTEGER NOT NULL DEFAULT 0"),
             ("attempts", "crossbow_shots", "INTEGER NOT NULL DEFAULT 0"),
+            ("attempts", "start_white_beds", "INTEGER NOT NULL DEFAULT 0"),
+            ("attempts", "start_anchors", "INTEGER NOT NULL DEFAULT 0"),
+            ("attempts", "start_bow", "INTEGER NOT NULL DEFAULT 0"),
+            ("attempts", "start_crossbow", "INTEGER NOT NULL DEFAULT 0"),
             ("attempt_beds", "damage_kind", "TEXT NOT NULL DEFAULT 'unknown'"),
             ("attempt_beds", "is_major", "INTEGER NOT NULL DEFAULT 0"),
         ]
@@ -238,11 +302,66 @@ class Database:
         )
         self._conn.execute(
             """
+            CREATE INDEX IF NOT EXISTS idx_attempts_source_world_fingerprint
+            ON attempts (attempt_source, world_name, storage_fingerprint)
+            """
+        )
+        self._conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS stronghold_samples (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                attempt_id INTEGER NOT NULL,
+                sample_index INTEGER NOT NULL,
+                gt INTEGER NOT NULL,
+                x INTEGER NOT NULL,
+                y INTEGER NOT NULL,
+                z INTEGER NOT NULL,
+                dim INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(attempt_id) REFERENCES attempts(id) ON DELETE CASCADE
+            )
+            """
+        )
+        self._conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_stronghold_samples_attempt
+            ON stronghold_samples (attempt_id, sample_index)
+            """
+        )
+        self._conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_stronghold_samples_gt
+            ON stronghold_samples (attempt_id, gt)
+            """
+        )
+        self._conn.execute(
+            """
             UPDATE attempts
             SET attempt_seed_mode = 'set_seed'
             WHERE attempt_seed_mode IS NULL
                OR TRIM(COALESCE(attempt_seed_mode, '')) = ''
                OR attempt_seed_mode NOT IN ('set_seed', 'full_random')
+            """
+        )
+        self._conn.execute(
+            """
+            UPDATE attempts
+            SET stronghold_sample_count = 0
+            WHERE stronghold_sample_count IS NULL
+            """
+        )
+        self._conn.execute(
+            """
+            UPDATE attempts
+            SET stronghold_portal_room_entered = 0
+            WHERE stronghold_portal_room_entered IS NULL
+            """
+        )
+        self._conn.execute(
+            """
+            UPDATE attempts
+            SET zero_attempt_eligible = 1
+            WHERE zero_attempt_eligible IS NULL
             """
         )
         # Keep MPK tower names aligned with practice-map naming.
