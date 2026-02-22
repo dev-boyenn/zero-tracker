@@ -695,7 +695,23 @@ class MpkAttemptTracker:
         if retry_world_name:
             retry_world = self.saves_dir / retry_world_name
             if retry_world.exists() and retry_world.is_dir():
-                world = retry_world
+                active_world_name = (self.active_world_name or "").strip()
+                prefer_retry = True
+                # Do not let an old stuck retry world starve newer worlds forever.
+                if active_world_name and active_world_name != retry_world_name:
+                    active_world = self.saves_dir / active_world_name
+                    if active_world.exists() and active_world.is_dir():
+                        try:
+                            prefer_retry = retry_world.stat().st_mtime >= active_world.stat().st_mtime
+                        except Exception:
+                            prefer_retry = False
+                    else:
+                        prefer_retry = False
+                if prefer_retry:
+                    world = retry_world
+                else:
+                    self._set_retry_world("")
+                    world = self._find_world_for_ingest()
             else:
                 self._set_retry_world("")
                 world = self._find_world_for_ingest()
