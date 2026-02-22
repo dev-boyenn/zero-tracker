@@ -1167,6 +1167,11 @@ tr:hover td {
   font-weight: 700;
 }
 
+.status-spectator {
+  color: #ffd166;
+  font-weight: 700;
+}
+
 .status-flyaway {
   color: #ffd166;
   font-weight: 700;

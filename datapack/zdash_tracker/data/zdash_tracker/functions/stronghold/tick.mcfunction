@@ -21,6 +21,9 @@ execute unless score #sh_active zdi matches 1 unless data storage zdash:tracker 
 execute unless score #sh_active zdi matches 1 if score #eye_delta zdi matches 1.. unless data storage zdash:tracker stronghold.eye_spy{logged:1b} as @a[limit=1] if predicate zdash_tracker:in_overworld run function zdash_tracker:stronghold/on_eye_use_stat
 execute unless score #sh_active zdi matches 1 unless data storage zdash:tracker stronghold.eye_spy{logged:1b} as @a[limit=1] if predicate zdash_tracker:in_overworld at @s run function zdash_tracker:stronghold/detect_entry_blocks
 
+# If player enters spectator during active SH split, mark it as failed.
+execute if score #sh_active zdi matches 1 unless data storage zdash:tracker stronghold.spectator{detected:1b} as @a[limit=1,gamemode=spectator] run function zdash_tracker:stronghold/mark_spectator_fail
+
 # Stop the stronghold tracking window at first End entry.
 execute if score #sh_active zdi matches 1 as @a[limit=1] if predicate zdash_tracker:in_end run function zdash_tracker:stronghold/on_end_enter
 

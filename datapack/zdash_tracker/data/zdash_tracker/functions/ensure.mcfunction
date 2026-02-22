@@ -78,7 +78,7 @@ execute unless score #eye_now zdi matches -2147483648..2147483647 run scoreboard
 execute unless score #eye_delta zdi matches -2147483648..2147483647 run scoreboard players set #eye_delta zdi 0
 
 execute unless data storage zdash:tracker meta run data modify storage zdash:tracker meta set value {scale:1000}
-execute unless data storage zdash:tracker meta{version:"v2026-02-21-stronghold-nav8"} run data modify storage zdash:tracker meta.version set value "v2026-02-21-stronghold-nav8"
+execute unless data storage zdash:tracker meta{version:"v2026-02-22-stronghold-nav9"} run data modify storage zdash:tracker meta.version set value "v2026-02-22-stronghold-nav9"
 execute unless data storage zdash:tracker run run data modify storage zdash:tracker run set value {active:0b,start_gt:0L,end_gt:0L,dragon_died:0b,dragon_died_gt:0L,flyaway:{armed:0b,detected:0b,node:"",node_code:0,detected_gt:0L,dragon_x:0,dragon_y:0,dragon_z:0,detected_dist2:0,crystals_alive:-1},deltas:{beds_exploded:0,anchors_interactions:0,anchors_exploded_est:0,bows_shot:0,crossbows_shot:0},end_entry:{logged:0b,gt:0L,player_y:0,top_y:-1,top_is_endstone:0b,start_white_beds:0,start_anchors:0,start_bow:0,start_crossbow:0},explosive_stand:{logged:0b,y:0},damage_by_source:{beds_scaled:0,anchors_scaled:0,other_scaled:0},damage_events:[],explode_events:[]}
 execute unless data storage zdash:tracker run.active run data modify storage zdash:tracker run.active set value 0b
 execute unless data storage zdash:tracker run.start_gt run data modify storage zdash:tracker run.start_gt set value 0L
@@ -95,10 +95,11 @@ execute unless data storage zdash:tracker run.damage_events run data modify stor
 execute unless data storage zdash:tracker run.explode_events run data modify storage zdash:tracker run.explode_events set value []
 execute unless data storage zdash:tracker cur run data modify storage zdash:tracker cur set value {x:0,y:0,z:0,yaw:0,pitch:0,gt:0L}
 execute unless data storage zdash:tracker samples run data modify storage zdash:tracker samples set value []
-execute unless data storage zdash:tracker stronghold run data modify storage zdash:tracker stronghold set value {active:0b,sample_interval_ticks:5,eye_spy:{logged:0b,gt:0L,x:0,y:0,z:0,dim:0},end_enter:{logged:0b,gt:0L,x:0,y:0,z:0,dim:0},samples:[]}
+execute unless data storage zdash:tracker stronghold run data modify storage zdash:tracker stronghold set value {active:0b,sample_interval_ticks:5,eye_spy:{logged:0b,gt:0L,x:0,y:0,z:0,dim:0},end_enter:{logged:0b,gt:0L,x:0,y:0,z:0,dim:0},spectator:{detected:0b,gt:0L,x:0,y:0,z:0,dim:0},samples:[]}
 execute unless data storage zdash:tracker stronghold.active run data modify storage zdash:tracker stronghold.active set value 0b
 execute unless data storage zdash:tracker stronghold.sample_interval_ticks run data modify storage zdash:tracker stronghold.sample_interval_ticks set value 5
 execute unless data storage zdash:tracker stronghold.eye_spy run data modify storage zdash:tracker stronghold.eye_spy set value {logged:0b,gt:0L,x:0,y:0,z:0,dim:0}
 execute unless data storage zdash:tracker stronghold.end_enter run data modify storage zdash:tracker stronghold.end_enter set value {logged:0b,gt:0L,x:0,y:0,z:0,dim:0}
+execute unless data storage zdash:tracker stronghold.spectator run data modify storage zdash:tracker stronghold.spectator set value {detected:0b,gt:0L,x:0,y:0,z:0,dim:0}
 execute unless data storage zdash:tracker stronghold.samples run data modify storage zdash:tracker stronghold.samples set value []
 execute unless data storage zdash:tracker stronghold_cur run data modify storage zdash:tracker stronghold_cur set value {x:0,y:0,z:0,gt:0L,dim:0}

@@ -77,9 +77,9 @@ scoreboard players set #eye_delta zdi 0
 
 # Storage layout.
 data modify storage zdash:tracker meta set value {scale:1000}
-data modify storage zdash:tracker meta.version set value "v2026-02-21-stronghold-nav8"
+data modify storage zdash:tracker meta.version set value "v2026-02-22-stronghold-nav9"
 data modify storage zdash:tracker run set value {active:0b,start_gt:0L,end_gt:0L,dragon_died:0b,dragon_died_gt:0L,flyaway:{armed:0b,detected:0b,node:"",node_code:0,detected_gt:0L,dragon_x:0,dragon_y:0,dragon_z:0,detected_dist2:0,crystals_alive:-1},deltas:{beds_exploded:0,anchors_interactions:0,anchors_exploded_est:0,bows_shot:0,crossbows_shot:0},end_entry:{logged:0b,gt:0L,player_y:0,top_y:-1,top_is_endstone:0b},explosive_stand:{logged:0b,y:0},damage_by_source:{beds_scaled:0,anchors_scaled:0,other_scaled:0},damage_events:[],explode_events:[]}
 data modify storage zdash:tracker cur set value {x:0,y:0,z:0,yaw:0,pitch:0,gt:0L}
 execute unless data storage zdash:tracker samples run data modify storage zdash:tracker samples set value []
-data modify storage zdash:tracker stronghold set value {active:0b,sample_interval_ticks:5,eye_spy:{logged:0b,gt:0L,x:0,y:0,z:0,dim:0},end_enter:{logged:0b,gt:0L,x:0,y:0,z:0,dim:0},samples:[]}
+data modify storage zdash:tracker stronghold set value {active:0b,sample_interval_ticks:5,eye_spy:{logged:0b,gt:0L,x:0,y:0,z:0,dim:0},end_enter:{logged:0b,gt:0L,x:0,y:0,z:0,dim:0},spectator:{detected:0b,gt:0L,x:0,y:0,z:0,dim:0},samples:[]}
 data modify storage zdash:tracker stronghold_cur set value {x:0,y:0,z:0,gt:0L,dim:0}

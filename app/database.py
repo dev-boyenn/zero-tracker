@@ -82,6 +82,8 @@ class Database:
             zero_attempt_eligible INTEGER NOT NULL DEFAULT 1,
             stronghold_eye_spy_gt INTEGER,
             stronghold_end_enter_gt INTEGER,
+            stronghold_spectator_detected INTEGER NOT NULL DEFAULT 0,
+            stronghold_spectator_gt INTEGER,
             stronghold_nav_ticks INTEGER,
             stronghold_nav_seconds REAL,
             stronghold_sample_count INTEGER NOT NULL DEFAULT 0,
@@ -198,6 +200,8 @@ class Database:
             ("attempts", "zero_attempt_eligible", "INTEGER NOT NULL DEFAULT 1"),
             ("attempts", "stronghold_eye_spy_gt", "INTEGER"),
             ("attempts", "stronghold_end_enter_gt", "INTEGER"),
+            ("attempts", "stronghold_spectator_detected", "INTEGER NOT NULL DEFAULT 0"),
+            ("attempts", "stronghold_spectator_gt", "INTEGER"),
             ("attempts", "stronghold_nav_ticks", "INTEGER"),
             ("attempts", "stronghold_nav_seconds", "REAL"),
             ("attempts", "stronghold_sample_count", "INTEGER NOT NULL DEFAULT 0"),
@@ -355,6 +359,13 @@ class Database:
             UPDATE attempts
             SET stronghold_portal_room_entered = 0
             WHERE stronghold_portal_room_entered IS NULL
+            """
+        )
+        self._conn.execute(
+            """
+            UPDATE attempts
+            SET stronghold_spectator_detected = 0
+            WHERE stronghold_spectator_detected IS NULL
             """
         )
         self._conn.execute(

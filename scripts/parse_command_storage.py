@@ -429,6 +429,9 @@ def run_metrics_from_storage(path: Path) -> dict[str, Any]:
     stronghold = tracker.get("stronghold") if isinstance(tracker.get("stronghold"), dict) else {}
     stronghold_eye = stronghold.get("eye_spy") if isinstance(stronghold.get("eye_spy"), dict) else {}
     stronghold_end = stronghold.get("end_enter") if isinstance(stronghold.get("end_enter"), dict) else {}
+    stronghold_spectator = (
+        stronghold.get("spectator") if isinstance(stronghold.get("spectator"), dict) else {}
+    )
     stronghold_samples = _parse_stronghold_samples(stronghold.get("samples"))
     explode_events = _parse_explode_events(run.get("explode_events"))
     damage_events = _parse_damage_events(run.get("damage_events"))
@@ -518,6 +521,8 @@ def run_metrics_from_storage(path: Path) -> dict[str, Any]:
     stronghold_eye_gt = int(stronghold_eye.get("gt", 0) or 0)
     stronghold_end_logged = bool(stronghold_end.get("logged", 0))
     stronghold_end_gt = int(stronghold_end.get("gt", 0) or 0)
+    stronghold_spectator_detected = bool(stronghold_spectator.get("detected", 0))
+    stronghold_spectator_gt = int(stronghold_spectator.get("gt", 0) or 0)
     stronghold_nav_ticks = (
         stronghold_end_gt - stronghold_eye_gt
         if stronghold_eye_logged and stronghold_end_logged and stronghold_end_gt > stronghold_eye_gt
@@ -570,6 +575,12 @@ def run_metrics_from_storage(path: Path) -> dict[str, Any]:
         "stronghold_end_enter_y": int(stronghold_end.get("y", 0) or 0),
         "stronghold_end_enter_z": int(stronghold_end.get("z", 0) or 0),
         "stronghold_end_enter_dim": int(stronghold_end.get("dim", 0) or 0),
+        "stronghold_spectator_detected": stronghold_spectator_detected,
+        "stronghold_spectator_gt": stronghold_spectator_gt,
+        "stronghold_spectator_x": int(stronghold_spectator.get("x", 0) or 0),
+        "stronghold_spectator_y": int(stronghold_spectator.get("y", 0) or 0),
+        "stronghold_spectator_z": int(stronghold_spectator.get("z", 0) or 0),
+        "stronghold_spectator_dim": int(stronghold_spectator.get("dim", 0) or 0),
         "stronghold_nav_ticks": stronghold_nav_ticks,
         "stronghold_nav_seconds": round(stronghold_nav_seconds, 3),
         "stronghold_sample_count": len(stronghold_samples),

@@ -397,6 +397,32 @@ def _derive_nav_seconds_from_visits(visits: Any) -> float:
     return float(end_gt - start_gt) / 20.0
 
 
+def _stronghold_result_meta(portal_entered: Any, spectator_detected: Any) -> dict[str, object]:
+    portal = int(portal_entered or 0) == 1
+    spectator = int(spectator_detected or 0) == 1
+    success = portal and not spectator
+    if success:
+        return {
+            "portal_success": True,
+            "portal_status_label": "yes",
+            "portal_status_class": "status-success",
+            "portal_fail_reason": "",
+        }
+    if spectator:
+        return {
+            "portal_success": False,
+            "portal_status_label": "no (spectator)",
+            "portal_status_class": "status-spectator",
+            "portal_fail_reason": "spectator",
+        }
+    return {
+        "portal_success": False,
+        "portal_status_label": "no",
+        "portal_status_class": "status-fail",
+        "portal_fail_reason": "",
+    }
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db = Database(DB_PATH)
@@ -763,7 +789,14 @@ def stronghold_dashboard(
         """
         SELECT
             COUNT(*) AS attempts,
-            SUM(CASE WHEN COALESCE(stronghold_portal_room_entered, 0) = 1 THEN 1 ELSE 0 END) AS portal_successes,
+            SUM(
+                CASE
+                    WHEN COALESCE(stronghold_portal_room_entered, 0) = 1
+                     AND COALESCE(stronghold_spectator_detected, 0) = 0
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS portal_successes,
             AVG(stronghold_starter_seconds) AS avg_starter_seconds,
             AVG(stronghold_avg_room_seconds) AS avg_room_seconds,
             AVG(
@@ -817,6 +850,8 @@ def stronghold_dashboard(
             world_seed,
             stronghold_eye_spy_gt,
             stronghold_end_enter_gt,
+            stronghold_spectator_detected,
+            stronghold_spectator_gt,
             stronghold_nav_ticks,
             stronghold_nav_seconds,
             stronghold_sample_count,
@@ -844,6 +879,10 @@ def stronghold_dashboard(
         attempt_id = int(row["id"])
         zero_type = str(row["zero_type"] or "")
         side = "Front" if zero_type.startswith("Front ") else "Back" if zero_type.startswith("Back ") else "Unknown"
+        result_meta = _stronghold_result_meta(
+            row["stronghold_portal_room_entered"],
+            row["stronghold_spectator_detected"],
+        )
         svg_url = _stronghold_svg_url(attempt_id, row["stronghold_map_svg_path"])
         json_url = _stronghold_json_url(attempt_id, row["stronghold_map_json_path"])
         nav_seconds = float(row["stronghold_nav_seconds"] or 0.0)
@@ -865,7 +904,10 @@ def stronghold_dashboard(
                 "stronghold_nav_ticks": nav_ticks if nav_ticks > 0 else None,
                 "stronghold_nav_seconds": nav_seconds if nav_seconds > 0 else None,
                 "side": side,
-                "portal_success": bool(int(row["stronghold_portal_room_entered"] or 0)),
+                "portal_success": bool(result_meta["portal_success"]),
+                "portal_status_label": str(result_meta["portal_status_label"]),
+                "portal_status_class": str(result_meta["portal_status_class"]),
+                "portal_fail_reason": str(result_meta["portal_fail_reason"]),
                 "detail_url": f"/stronghold/{attempt_id}",
                 "svg_url": svg_url,
                 "json_url": json_url,
@@ -894,6 +936,8 @@ def stronghold_attempt_detail(request: Request, attempt_id: int) -> dict[str, ob
             world_seed,
             stronghold_eye_spy_gt,
             stronghold_end_enter_gt,
+            stronghold_spectator_detected,
+            stronghold_spectator_gt,
             stronghold_nav_ticks,
             stronghold_nav_seconds,
             stronghold_sample_count,
@@ -936,7 +980,14 @@ def stronghold_attempt_detail(request: Request, attempt_id: int) -> dict[str, ob
     attempt["side"] = (
         "Front" if zero_type.startswith("Front ") else "Back" if zero_type.startswith("Back ") else "Unknown"
     )
-    attempt["portal_success"] = bool(int(attempt.get("stronghold_portal_room_entered") or 0))
+    result_meta = _stronghold_result_meta(
+        attempt.get("stronghold_portal_room_entered"),
+        attempt.get("stronghold_spectator_detected"),
+    )
+    attempt["portal_success"] = bool(result_meta["portal_success"])
+    attempt["portal_status_label"] = str(result_meta["portal_status_label"])
+    attempt["portal_status_class"] = str(result_meta["portal_status_class"])
+    attempt["portal_fail_reason"] = str(result_meta["portal_fail_reason"])
     attempt["detail_url"] = f"/stronghold/{attempt_id}"
     attempt["svg_url"] = _stronghold_svg_url(attempt_id, attempt.get("stronghold_map_svg_path"))
     attempt["json_url"] = _stronghold_json_url(attempt_id, attempt.get("stronghold_map_json_path"))

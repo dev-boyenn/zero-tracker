@@ -133,7 +133,12 @@ function renderStrongholdRecentTable(runs) {
     const navTimeRaw = Number(run.stronghold_nav_seconds || 0);
     const navTime =
       navTimeRaw > 0 ? navTimeRaw : deriveNavSecondsFromVisits(run.visits || []);
-    const portalText = run.portal_success ? "yes" : "no";
+    const portalText = String(
+      run.portal_status_label || (run.portal_success ? "yes" : "no")
+    );
+    const portalClass = String(
+      run.portal_status_class || (run.portal_success ? "status-success" : "status-fail")
+    );
     const side = sideFromType(run.zero_type);
     const startedAtFull = escapeHtmlAttr(formatDateTime(run.started_at_utc));
     const startedAtRelative = formatRelativeDateTime(run.started_at_utc);
@@ -148,7 +153,7 @@ function renderStrongholdRecentTable(runs) {
     tr.innerHTML = `
       <td><a class="inline-link" href="/stronghold/${id}">#${id}</a></td>
       <td title="${startedAtFull}">${startedAtRelative}</td>
-      <td class="${run.portal_success ? "status-success" : "status-fail"}">${portalText}</td>
+      <td class="${portalClass}">${portalText}</td>
       <td>${run.tower_name || "Unknown"}</td>
       <td>${side}</td>
       <td>${run.o_level === null || run.o_level === undefined ? "-" : `O${Number(run.o_level)}`}</td>
@@ -245,7 +250,24 @@ function renderStrongholdDetail(payload) {
       attempt.started_at_utc
     )}`
   );
-  setText("shdPortal", attempt.portal_success ? "Yes" : "No");
+  const detailPortalLabelRaw = String(
+    attempt.portal_status_label || (attempt.portal_success ? "yes" : "no")
+  );
+  const detailPortalLabel =
+    detailPortalLabelRaw.length > 0
+      ? `${detailPortalLabelRaw[0].toUpperCase()}${detailPortalLabelRaw.slice(1)}`
+      : "No";
+  setText("shdPortal", detailPortalLabel);
+  const portalNode = document.getElementById("shdPortal");
+  if (portalNode) {
+    portalNode.classList.remove("status-success", "status-fail", "status-spectator");
+    portalNode.classList.add(
+      String(
+        attempt.portal_status_class ||
+          (attempt.portal_success ? "status-success" : "status-fail")
+      )
+    );
+  }
   setText("shdStarterTime", formatSec(attempt.stronghold_starter_seconds || 0));
   setText("shdRoomsEntered", attempt.stronghold_rooms_entered ?? "-");
   setText("shdOptimalRooms", attempt.stronghold_optimal_rooms ?? "-");

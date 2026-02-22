@@ -46,6 +46,15 @@ class MpkAttemptTracker:
         103: "Tall Boy",
     }
     MIN_END_TICKS_FOR_ATTEMPT = 100
+    _F3C_TP_RE = re.compile(
+        r"^/execute\s+in\s+(?P<dim>[a-z0-9_:\.-]+)\s+run\s+tp\s+@s\s+"
+        r"(?P<x>-?\d+(?:\.\d+)?)\s+"
+        r"(?P<y>-?\d+(?:\.\d+)?)\s+"
+        r"(?P<z>-?\d+(?:\.\d+)?)\s+"
+        r"(?P<yaw>-?\d+(?:\.\d+)?)\s+"
+        r"(?P<pitch>-?\d+(?:\.\d+)?)\s*$",
+        re.IGNORECASE,
+    )
 
     def __init__(
         self,
@@ -76,12 +85,18 @@ class MpkAttemptTracker:
         self.pending_world_seed_for_seed_rotation: str | None = None
         self.last_rotated_world_name = self.db.get_state("mpk.seed_rotate.last_world", "") or ""
         self.active_world_name = self.db.get_state(self.state_active_world_key, "") or ""
+        self.last_clipboard_poll_ts = 0.0
+        self.clipboard_poll_interval_seconds = 0.9
+        self.last_clipboard_raw = ""
+        self.manual_aim_lines_by_world: dict[str, list[str]] = {}
+        self.manual_aim_seen_by_world: dict[str, set[str]] = {}
 
     def handle_chat_event(self, event_id: int, chat_message: str, clock_time: str | None) -> None:
         # MPK ingestion is driven by world-exit log lines, not chat.
         return
 
     def handle_log_event(self, event_id: int, parsed: ParsedLogLine) -> None:
+        self._poll_clipboard_for_manual_aim()
         body = (parsed.body or "").strip()
         transition_world = self._world_name_from_transition_line(body)
         # Language-agnostic ingest trigger: when a new world starts loading,
@@ -96,6 +111,110 @@ class MpkAttemptTracker:
             return
         self.last_seen_exit_event_id = event_id
         self._ingest_latest_world(event_id=event_id, clock_time=parsed.clock_time)
+
+    def _read_clipboard_text_windows(self) -> str | None:
+        try:
+            proc = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", "Get-Clipboard -Raw"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=1.2,
+            )
+        except Exception:
+            return None
+        if int(proc.returncode) != 0:
+            return None
+        return str(proc.stdout or "").strip()
+
+    def _parse_f3c_tp_line(self, line: str | None) -> dict[str, float | str] | None:
+        raw = str(line or "").strip()
+        if not raw:
+            return None
+        match = self._F3C_TP_RE.match(raw)
+        if match is None:
+            return None
+        try:
+            return {
+                "raw": raw,
+                "dim": str(match.group("dim")).lower(),
+                "x": float(match.group("x")),
+                "y": float(match.group("y")),
+                "z": float(match.group("z")),
+                "yaw": float(match.group("yaw")),
+                "pitch": float(match.group("pitch")),
+            }
+        except Exception:
+            return None
+
+    def _active_world_for_manual_aim(self) -> str:
+        candidate = (self.active_world_name or "").strip()
+        if candidate:
+            return candidate
+        pending = (self.pending_world_name_for_seed_rotation or "").strip()
+        if pending:
+            return pending
+        return ""
+
+    def _prune_manual_aim_cache(self, keep_world: str = "") -> None:
+        # Keep memory bounded in very long sessions.
+        if len(self.manual_aim_lines_by_world) <= 24:
+            return
+        protected = {keep_world} if keep_world else set()
+        keys = list(self.manual_aim_lines_by_world.keys())
+        for key in keys:
+            if key in protected:
+                continue
+            self.manual_aim_lines_by_world.pop(key, None)
+            self.manual_aim_seen_by_world.pop(key, None)
+            if len(self.manual_aim_lines_by_world) <= 16:
+                break
+
+    def _add_manual_aim_for_world(self, world_name: str, raw_line: str) -> None:
+        world = (world_name or "").strip()
+        raw = str(raw_line or "").strip()
+        if not world or not raw:
+            return
+        seen = self.manual_aim_seen_by_world.setdefault(world, set())
+        if raw in seen:
+            return
+        seen.add(raw)
+        lines = self.manual_aim_lines_by_world.setdefault(world, [])
+        lines.append(raw)
+        # Prevent unbounded command size when invoking analyzer.
+        if len(lines) > 64:
+            del lines[0 : len(lines) - 64]
+        self.db.set_state("mpk.stronghold.manual_aim_world", world)
+        self.db.set_state("mpk.stronghold.manual_aim_count", str(len(lines)))
+        self._prune_manual_aim_cache(keep_world=world)
+
+    def _take_manual_aim_lines_for_world(self, world_name: str) -> list[str]:
+        world = (world_name or "").strip()
+        if not world:
+            return []
+        lines = list(self.manual_aim_lines_by_world.get(world, []))
+        # Consume once per analyzed world.
+        self.manual_aim_lines_by_world.pop(world, None)
+        self.manual_aim_seen_by_world.pop(world, None)
+        return lines
+
+    def _poll_clipboard_for_manual_aim(self) -> None:
+        now = time.time()
+        if (now - self.last_clipboard_poll_ts) < self.clipboard_poll_interval_seconds:
+            return
+        self.last_clipboard_poll_ts = now
+        clip_raw = self._read_clipboard_text_windows()
+        if not clip_raw or clip_raw == self.last_clipboard_raw:
+            return
+        self.last_clipboard_raw = clip_raw
+        parsed = self._parse_f3c_tp_line(clip_raw)
+        if parsed is None:
+            return
+        world_name = self._active_world_for_manual_aim()
+        if not world_name:
+            return
+        self._add_manual_aim_for_world(world_name, str(parsed["raw"]))
 
     def _handle_seed_rotation_on_run_start(self, parsed: ParsedLogLine) -> None:
         body = (parsed.body or "").strip()
@@ -421,7 +540,13 @@ class MpkAttemptTracker:
             cleaned = "world"
         return cleaned.replace(" ", "_")
 
-    def _analyze_stronghold_world(self, *, world: Path, attempt_id: int) -> None:
+    def _analyze_stronghold_world(
+        self,
+        *,
+        world: Path,
+        attempt_id: int,
+        manual_aim_lines: list[str] | None = None,
+    ) -> None:
         stronghold_maps_dir = PROJECT_ROOT / "data" / "stronghold_maps"
         stronghold_maps_dir.mkdir(parents=True, exist_ok=True)
         out_stem = self._world_output_stem(world.name)
@@ -438,6 +563,10 @@ class MpkAttemptTracker:
             "--out",
             str(out_json),
         ]
+        for raw_line in list(manual_aim_lines or []):
+            line = str(raw_line or "").strip()
+            if line:
+                cmd.extend(["--aim-line", line])
         proc = subprocess.run(
             cmd,
             capture_output=True,
@@ -653,6 +782,8 @@ class MpkAttemptTracker:
 
         stronghold_eye_spy_gt = int(metrics.get("stronghold_eye_spy_gt", 0) or 0)
         stronghold_end_enter_gt = int(metrics.get("stronghold_end_enter_gt", 0) or 0)
+        stronghold_spectator_detected = bool(metrics.get("stronghold_spectator_detected", False))
+        stronghold_spectator_gt = int(metrics.get("stronghold_spectator_gt", 0) or 0)
         stronghold_nav_ticks = int(metrics.get("stronghold_nav_ticks", 0) or 0)
         stronghold_nav_seconds = float(metrics.get("stronghold_nav_seconds", 0.0) or 0.0)
         now_utc = utc_now()
@@ -693,6 +824,8 @@ class MpkAttemptTracker:
                 stronghold_sample_count = ?,
                 stronghold_eye_spy_gt = ?,
                 stronghold_end_enter_gt = ?,
+                stronghold_spectator_detected = ?,
+                stronghold_spectator_gt = ?,
                 stronghold_nav_ticks = ?,
                 stronghold_nav_seconds = ?
             WHERE id = ?
@@ -702,13 +835,19 @@ class MpkAttemptTracker:
                 len(stronghold_samples),
                 stronghold_eye_spy_gt if stronghold_eye_spy_gt > 0 else None,
                 stronghold_end_enter_gt if stronghold_end_enter_gt > 0 else None,
+                1 if stronghold_spectator_detected else 0,
+                stronghold_spectator_gt if stronghold_spectator_gt > 0 else None,
                 stronghold_nav_ticks if stronghold_nav_ticks > 0 else None,
                 stronghold_nav_seconds if stronghold_nav_seconds > 0 else None,
                 attempt_id,
             ),
         )
         try:
-            self._analyze_stronghold_world(world=world, attempt_id=attempt_id)
+            self._analyze_stronghold_world(
+                world=world,
+                attempt_id=attempt_id,
+                manual_aim_lines=self._take_manual_aim_lines_for_world(world.name),
+            )
         except Exception as exc:
             self.db.set_state(
                 "mpk.stronghold.last_error",
@@ -929,6 +1068,8 @@ class MpkAttemptTracker:
         damage_events_count = int(metrics.get("damage_events_count", 0) or 0)
         stronghold_eye_spy_gt = int(metrics.get("stronghold_eye_spy_gt", 0) or 0)
         stronghold_end_enter_gt = int(metrics.get("stronghold_end_enter_gt", 0) or 0)
+        stronghold_spectator_detected = bool(metrics.get("stronghold_spectator_detected", False))
+        stronghold_spectator_gt = int(metrics.get("stronghold_spectator_gt", 0) or 0)
         stronghold_nav_ticks = int(metrics.get("stronghold_nav_ticks", 0) or 0)
         stronghold_nav_seconds = float(metrics.get("stronghold_nav_seconds", 0.0) or 0.0)
         explosive_standing_y_raw = metrics.get("explosive_standing_y", None)
@@ -988,6 +1129,8 @@ class MpkAttemptTracker:
                 zero_attempt_eligible,
                 stronghold_eye_spy_gt,
                 stronghold_end_enter_gt,
+                stronghold_spectator_detected,
+                stronghold_spectator_gt,
                 stronghold_nav_ticks,
                 stronghold_nav_seconds,
                 stronghold_sample_count,
@@ -996,7 +1139,7 @@ class MpkAttemptTracker:
                 stronghold_starter_seconds,
                 created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, 'mpk', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, 'mpk', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 event_id if event_id > 0 else None,
@@ -1039,6 +1182,8 @@ class MpkAttemptTracker:
                 zero_attempt_eligible,
                 stronghold_eye_spy_gt if stronghold_eye_spy_gt > 0 else None,
                 stronghold_end_enter_gt if stronghold_end_enter_gt > 0 else None,
+                1 if stronghold_spectator_detected else 0,
+                stronghold_spectator_gt if stronghold_spectator_gt > 0 else None,
                 stronghold_nav_ticks if stronghold_nav_ticks > 0 else None,
                 stronghold_nav_seconds if stronghold_nav_seconds > 0 else None,
                 stronghold_sample_count if stronghold_sample_count > 0 else 0,
@@ -1112,7 +1257,11 @@ class MpkAttemptTracker:
 
         if stronghold_sample_count > 0:
             try:
-                self._analyze_stronghold_world(world=world, attempt_id=attempt_id)
+                self._analyze_stronghold_world(
+                    world=world,
+                    attempt_id=attempt_id,
+                    manual_aim_lines=self._take_manual_aim_lines_for_world(world.name),
+                )
             except Exception as exc:
                 self.db.set_state(
                     "mpk.stronghold.last_error",
