@@ -39,10 +39,11 @@ py -3 run_dashboard.py
 ```
 5. Open `http://127.0.0.1:8000`
 
-Alternative: run `run_zero_tracker.bat` to auto-clone/update, install requirements, and start.
+--- 
+Alternatively, download and run [`run_zero_tracker.bat`](https://github.com/dev-boyenn/zero-tracker/raw/refs/heads/main/run_zero_tracker.bat) to auto-clone/update, install requirements, and start.
 
 ## First-Time Setup In UI
-1. Enter your MultiMC instance path (.minecraft folder).
+1. Enter your Prism/MultiMC instance path (.minecraft folder).
 2. Choose toggles (or Legal Ranked mode).
 3. Click `Save & Inject`.
 4. Use `Uninject + Clear Path` to restore and clear config. ( will also happen on application exit )
